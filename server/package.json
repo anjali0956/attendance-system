@@ -1,0 +1,13 @@
+{
+  "name": "attendance-server",
+  "version": "1.0.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node test.js && node e2e.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.19.2",
+    "googleapis": "^140.0.0"
+  }
+}

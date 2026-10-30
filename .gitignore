@@ -1,0 +1,15 @@
+node_modules/
+*.db
+*.db-wal
+*.db-shm
+android/build/
+android/app/build/
+android/.gradle/
+android/.kotlin/
+android/local.properties
+# Secrets. These must never go on GitHub.
+.env
+*.jks
+*.keystore
+*.pem
+service-account*.json

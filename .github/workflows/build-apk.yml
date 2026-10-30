@@ -1,0 +1,39 @@
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  test-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the setup script
+        run: bash -n deploy/setup.sh
+      - name: Run server tests
+        working-directory: server
+        run: |
+          npm ci
+          npm test
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - name: Test and build debug APK
+        working-directory: android
+        run: gradle testDebugUnitTest assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: attendance-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

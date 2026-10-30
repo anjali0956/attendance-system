@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attendance admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#f3f5f2;--surface:#fff;--ink:#1b2a2f;--muted:#66767a;--line:#d9e0dc;--ok:#1f7a54;--okbg:#dff1e7;--bad:#a02727;--badbg:#f6dcdc}
+@media (prefers-color-scheme:dark){:root{--bg:#101a1d;--surface:#17252a;--ink:#e8efec;--muted:#93a5a8;--line:#27393e;--ok:#58c796;--okbg:#17382b;--bad:#f09a9a;--badbg:#3d1d1d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1500px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:26px;margin:0 0 16px}h2{font-size:18px;margin:0 0 10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.row>div{flex:1 1 140px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}
+input{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+button{font:inherit;background:var(--ink);color:var(--surface);border:0;border-radius:6px;padding:8px 14px;cursor:pointer}
+button.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:820px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
+th{font-size:13px;color:var(--muted);font-weight:500}
+.pill{display:inline-block;border-radius:99px;padding:1px 9px;font-size:13px}
+.ok{background:var(--okbg);color:var(--ok)}.bad{background:var(--badbg);color:var(--bad)}
+.msg{color:var(--muted);font-size:13px;margin:8px 0 0;min-height:19px}
+#map{height:380px;border-radius:8px;border:1px solid var(--line);margin:10px 0}
+ul{margin:6px 0 0;padding-left:20px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>Attendance admin</h1>
+
+<div class="card">
+  <h2>Office location</h2>
+  <div class="row">
+    <div><label for="lat">Latitude</label><input id="lat" type="number" step="any"></div>
+    <div><label for="lng">Longitude</label><input id="lng" type="number" step="any"></div>
+    <div><label for="rad">Radius (metres)</label><input id="rad" type="number" value="100" min="30" max="2000"></div>
+    <button class="ghost" id="here">Use my location</button>
+    <button id="saveOffice">Save</button>
+  </div>
+  <p class="msg" id="officeMsg"></p>
+</div>
+
+<div class="card">
+  <h2>Employees</h2>
+  <div class="row">
+    <div><label for="ename">Name</label><input id="ename"></div>
+    <div><label for="edept">Department</label><input id="edept"></div>
+    <button id="addEmp">Add employee</button>
+  </div>
+  <p class="msg" id="empMsg">Give the enrollment code to the employee. They enter it once in the app.</p>
+  <div class="scroll"><table><thead><tr><th>Name</th><th>Department</th><th>Phone</th><th></th></tr></thead><tbody id="emps"></tbody></table></div>
+</div>
+
+<div class="card">
+  <h2>Attendance</h2>
+  <div class="row"><div><label for="date">Date</label><input id="date" type="date"></div><button class="ghost" id="reload">Refresh</button></div>
+  <div class="scroll"><table>
+    <thead><tr><th>Name</th><th>Department</th><th>In</th><th>In distance and accuracy</th><th>Out</th><th>Out distance and accuracy</th><th>Hours</th><th>Travelled</th><th>Away</th><th>Gaps</th><th>Checks</th><th>Trip</th></tr></thead>
+    <tbody id="rows"></tbody></table></div>
+  <p class="msg" id="none" hidden>No records for this date.</p>
+</div>
+
+<div class="card" id="trip" hidden>
+  <div class="row"><h2 id="tripHead" style="flex:1 1 auto;margin:0"></h2><button class="ghost" id="tripClose" style="flex:0 0 auto">Close</button></div>
+  <div id="map"></div>
+  <p class="msg" id="tripStats"></p>
+  <div class="scroll"><table style="min-width:600px"><thead><tr><th></th><th>Time</th><th>Distance from office</th><th>GPS accuracy</th><th>Position</th></tr></thead><tbody id="tripClock"></tbody></table></div>
+  <div id="tripGaps"></div>
+  <div id="tripFlags"></div>
+</div>
+
+<div class="card">
+  <h2>Blocked and failed attempts</h2>
+  <div class="scroll"><table style="min-width:500px"><thead><tr><th>When</th><th>Employee</th><th>What happened</th></tr></thead><tbody id="alerts"></tbody></table></div>
+</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const pad = n => String(n).padStart(2, "0");
+const hm = t => new Date(t).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+const km = m => (m / 1000).toFixed(2) + " km";
+const dur = ms => { const min = Math.round(ms / 60000); return min < 60 ? min + " min" : Math.floor(min / 60) + " h " + (min % 60) + " min"; };
+async function api(path, body) {
+  const r = await fetch("/admin/api" + path, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : undefined);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "Request failed");
+  return j;
+}
+const today = () => { const d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
+$("date").value = today();
+
+async function loadOffice() {
+  const o = await api("/office");
+  if (o) { $("lat").value = o.lat; $("lng").value = o.lng; $("rad").value = o.radius; }
+}
+$("here").onclick = () => navigator.geolocation.getCurrentPosition(
+  p => { $("lat").value = p.coords.latitude.toFixed(6); $("lng").value = p.coords.longitude.toFixed(6); $("officeMsg").textContent = "Position filled in (±" + Math.round(p.coords.accuracy) + " m). Press Save."; },
+  () => { $("officeMsg").textContent = "Couldn’t read your location. Type the coordinates instead."; });
+$("saveOffice").onclick = async () => {
+  try { await api("/office", {lat: parseFloat($("lat").value), lng: parseFloat($("lng").value), radius: parseInt($("rad").value, 10)}); $("officeMsg").textContent = "Saved."; }
+  catch (e) { $("officeMsg").textContent = e.message; }
+};
+
+async function loadEmps() {
+  const list = await api("/employees");
+  $("emps").innerHTML = list.map(e => `<tr><td>${esc(e.name)}</td><td>${esc(e.dept) || "–"}</td>
+    <td>${e.enrolled ? '<span class="pill ok">Enrolled</span>' : "Waiting. Code: <b>" + esc(e.code) + "</b>"}</td>
+    <td><button class="ghost" data-reset="${e.id}">New code / reset phone</button></td></tr>`).join("");
+}
+$("emps").onclick = async e => {
+  const id = e.target.dataset.reset;
+  if (!id || !confirm("This signs the employee out of their current phone and creates a new enrollment code. Continue?")) return;
+  const r = await api("/employees/" + id + "/reset", {});
+  $("empMsg").textContent = "New enrollment code: " + r.code; loadEmps();
+};
+$("addEmp").onclick = async () => {
+  try { const r = await api("/employees", {name: $("ename").value, dept: $("edept").value}); $("empMsg").textContent = "Added. Enrollment code: " + r.code; $("ename").value = ""; $("edept").value = ""; loadEmps(); }
+  catch (e) { $("empMsg").textContent = e.message; }
+};
+
+let rows = [];
+async function loadAtt() {
+  const from = new Date($("date").value + "T00:00:00").getTime();
+  rows = await api("/attendance?from=" + from + "&to=" + (from + 86400000));
+  $("none").hidden = rows.length > 0;
+  $("rows").innerHTML = rows.map((r, i) => `<tr><td>${esc(r.name)}</td><td>${esc(r.dept) || "–"}</td>
+    <td>${hm(r.in_at)}</td><td>${r.in_dist} m, ±${r.in_acc} m</td>
+    <td>${r.out_at ? hm(r.out_at) : "Still in"}</td><td>${r.out_at ? r.out_dist + " m, ±" + r.out_acc + " m" : "–"}</td>
+    <td>${(((r.out_at || Date.now()) - r.in_at) / 36e5).toFixed(2)}</td>
+    <td>${km(r.stats.distanceM)}</td><td>${dur(r.stats.awayMs)}</td>
+    <td>${r.stats.gaps.length ? `<span class="pill bad">${r.stats.gaps.length} (${dur(r.stats.gapMs)})</span>` : "None"}</td>
+    <td>${r.flags.length ? `<span class="pill bad" title="${esc(r.flags.join("; "))}">Review (${r.flags.length})</span>` : '<span class="pill ok">No flags</span>'}</td>
+    <td><button class="ghost" data-trip="${r.id}">View trip</button></td></tr>`).join("");
+}
+$("date").onchange = loadAtt; $("reload").onclick = () => { loadAtt(); loadAlerts(); };
+$("rows").onclick = e => { if (e.target.dataset.trip) showTrip(e.target.dataset.trip); };
+$("tripClose").onclick = () => { $("trip").hidden = true; };
+
+let map, layer;
+async function showTrip(id) {
+  const t = await api("/trip/" + id), pts = t.points, a = t.attendance;
+  $("trip").hidden = false;
+  $("tripHead").textContent = a.name + " · " + hm(a.in_at) + " to " + (a.out_at ? hm(a.out_at) : "now");
+  if (!map) { map = L.map("map"); L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19, attribution: "© OpenStreetMap contributors"}).addTo(map); }
+  if (layer) layer.remove();
+  layer = L.layerGroup().addTo(map);
+  const ll = pts.map(p => [p.lat, p.lng]);
+  if (t.office) { L.circle([t.office.lat, t.office.lng], {radius: t.office.radius, color: "#66767a", dashArray: "6 5", fill: false}).addTo(layer); ll.push([t.office.lat, t.office.lng]); }
+  // A solid line where points arrived, and a dashed grey one across each gap, where the route is unknown.
+  const isGap = (a, b) => t.stats.gaps.some(g => g.from === a.t && g.to === b.t);
+  let run = [];
+  pts.forEach((p, i) => {
+    if (i && isGap(pts[i - 1], p)) {
+      L.polyline(run, {color: "#2c6fbb", weight: 3}).addTo(layer);
+      L.polyline([run[run.length - 1], [p.lat, p.lng]], {color: "#66767a", weight: 2, dashArray: "4 8"}).bindTooltip("No location received, " + hm(pts[i - 1].t) + " to " + hm(p.t)).addTo(layer);
+      run = [];
+    }
+    run.push([p.lat, p.lng]);
+  });
+  if (run.length) L.polyline(run, {color: "#2c6fbb", weight: 3}).addTo(layer);
+  pts.forEach(p => {
+    const color = p.mock ? "#c0392b" : !p.ver ? "#e08e0b" : "#2c6fbb";
+    L.circleMarker([p.lat, p.lng], {radius: 2.5, weight: 1, color, fillColor: color, fillOpacity: 1}).bindTooltip(hm(p.t) + " ±" + p.acc + " m" + (p.mock ? " (mock)" : !p.ver ? " (unverified)" : "")).addTo(layer);
+  });
+  // Clock-in and clock-out, each with a ring showing how accurate the reading was.
+  const clockMark = (label, color, lat, lng, acc, when, d) => {
+    L.circle([lat, lng], {radius: acc, color, weight: 1, fillOpacity: 0.15}).addTo(layer);
+    L.circleMarker([lat, lng], {radius: 9, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1})
+      .bindTooltip(label + ", " + hm(when) + ", " + d + " m from the office, ±" + acc + " m", {permanent: true, direction: "top"}).addTo(layer);
+    ll.push([lat, lng]);
+    return `<tr><td><span style="color:${color}">●</span> ${label}</td><td>${hm(when)}</td><td>${d} m</td><td>±${acc} m</td><td>${lat.toFixed(6)}, ${lng.toFixed(6)}</td></tr>`;
+  };
+  let clockRows = clockMark("Clock-in", "#1f7a54", a.in_lat, a.in_lng, a.in_acc, a.in_at, a.in_dist);
+  if (a.out_at) clockRows += clockMark("Clock-out", "#7a3fb0", a.out_lat, a.out_lng, a.out_acc, a.out_at, a.out_dist);
+  $("tripClock").innerHTML = clockRows;
+  if (ll.length) map.fitBounds(ll, {padding: [40, 40], maxZoom: 18});
+  setTimeout(() => map.invalidateSize(), 50);
+  const s = t.stats;
+  $("tripStats").textContent = pts.length + (pts.length === 1 ? " point · " : " points · ") + km(s.distanceM) + " travelled · " + dur(s.awayMs) + " away from the office" + (t.office ? " · farthest " + s.farthestM + " m from the office" : "") + " · " + (s.gaps.length ? dur(s.gapMs) + " with no location" : "no gaps") + ". Red points are mock locations, orange points were not verified by Play Integrity.";
+  $("tripGaps").innerHTML = s.gaps.length
+    ? '<p style="margin:12px 0 0"><b>Gaps where no location was received</b></p><ul>' + s.gaps.map(g => "<li>" + hm(g.from) + " to " + (g.ongoing ? "now" : hm(g.to)) + " (" + dur(g.to - g.from) + ")" + (g.ongoing ? ", nothing received since" : "") + "</li>").join("") + "</ul>"
+    : "";
+  $("tripFlags").style.marginTop = "12px";
+  $("tripFlags").innerHTML = t.flags.length
+    ? '<span class="pill bad">Review</span><ul>' + t.flags.map(f => "<li>" + esc(f) + "</li>").join("") + "</ul>"
+    : '<span class="pill ok">No anomalies found</span>';
+  $("trip").scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+
+async function loadAlerts() {
+  const list = await api("/alerts");
+  $("alerts").innerHTML = list.length ? list.map(a => `<tr><td>${new Date(a.at).toLocaleString()}</td><td>${esc(a.name) || "–"}</td><td>${esc(a.text)}</td></tr>`).join("") : '<tr><td colspan="3">Nothing blocked so far.</td></tr>';
+}
+loadOffice(); loadEmps(); loadAtt(); loadAlerts();
+</script>
+</body>
+</html>
