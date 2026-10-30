@@ -15,7 +15,7 @@ android {
         versionName = "1.0"
 
         // CHANGE THESE TWO before building.
-        buildConfigField("String", "SERVER_URL", "\"https://attendance.example.com\"")
+        buildConfigField("String", "SERVER_URL", "\"https://139.59.6.181.sslip.io\"")
         buildConfigField("long", "CLOUD_PROJECT_NUMBER", "0L") // Google Cloud project number linked in Play Console
     }
 
