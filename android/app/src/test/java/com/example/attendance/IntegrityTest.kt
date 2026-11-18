@@ -7,7 +7,7 @@ import org.junit.Test
 class IntegrityTest {
     @Test
     fun clockNonceMatchesServer() {
-        assertEquals("1krGc6a0mkE9rbxXp5Znu39i9npaelZj8OaTxiK_f9I", Integrity.nonceFor(listOf("abc", "in", "10000000", "76000000", "12")))
+        assertEquals("jVAY1Ad9u2Kf1aHGcGAMnbZRoMirR1K_WiTsLNoI3N0", Integrity.nonceFor(listOf("abc", "in", "10000000", "76000000", "12", "/9j/AA==")))
     }
 
     @Test

@@ -41,10 +41,11 @@ ul{margin:6px 0 0;padding-left:20px}
     <div><label for="lat">Latitude</label><input id="lat" type="number" step="any"></div>
     <div><label for="lng">Longitude</label><input id="lng" type="number" step="any"></div>
     <div><label for="rad">Radius (metres)</label><input id="rad" type="number" value="100" min="30" max="2000"></div>
+    <div><label for="maxAcc">Worst GPS accuracy allowed (metres)</label><input id="maxAcc" type="number" value="50" min="10" max="150"></div>
     <button class="ghost" id="here">Use my location</button>
     <button id="saveOffice">Save</button>
   </div>
-  <p class="msg" id="officeMsg"></p>
+  <p class="msg" id="officeMsg">Clock-ins and clock-outs with a less accurate GPS reading are refused. Raise it if employees inside the office are often refused.</p>
 </div>
 
 <div class="card">
@@ -71,13 +72,13 @@ ul{margin:6px 0 0;padding-left:20px}
   <div class="row"><h2 id="tripHead" style="flex:1 1 auto;margin:0"></h2><button class="ghost" id="tripClose" style="flex:0 0 auto">Close</button></div>
   <div id="map"></div>
   <p class="msg" id="tripStats"></p>
-  <div class="scroll"><table style="min-width:600px"><thead><tr><th></th><th>Time</th><th>Distance from office</th><th>GPS accuracy</th><th>Position</th></tr></thead><tbody id="tripClock"></tbody></table></div>
+  <div class="scroll"><table style="min-width:600px"><thead><tr><th></th><th>Time</th><th>Distance from office</th><th>GPS accuracy</th><th>Position</th><th>Selfie</th></tr></thead><tbody id="tripClock"></tbody></table></div>
   <div id="tripGaps"></div>
   <div id="tripFlags"></div>
 </div>
 
 <div class="card">
-  <h2>Blocked and failed attempts</h2>
+  <h2>Alerts and blocked attempts</h2>
   <div class="scroll"><table style="min-width:500px"><thead><tr><th>When</th><th>Employee</th><th>What happened</th></tr></thead><tbody id="alerts"></tbody></table></div>
 </div>
 </main>
@@ -101,20 +102,20 @@ $("date").value = today();
 
 async function loadOffice() {
   const o = await api("/office");
-  if (o) { $("lat").value = o.lat; $("lng").value = o.lng; $("rad").value = o.radius; }
+  if (o) { $("lat").value = o.lat; $("lng").value = o.lng; $("rad").value = o.radius; $("maxAcc").value = o.maxAcc; }
 }
 $("here").onclick = () => navigator.geolocation.getCurrentPosition(
   p => { $("lat").value = p.coords.latitude.toFixed(6); $("lng").value = p.coords.longitude.toFixed(6); $("officeMsg").textContent = "Position filled in (±" + Math.round(p.coords.accuracy) + " m). Press Save."; },
   () => { $("officeMsg").textContent = "Couldn’t read your location. Type the coordinates instead."; });
 $("saveOffice").onclick = async () => {
-  try { await api("/office", {lat: parseFloat($("lat").value), lng: parseFloat($("lng").value), radius: parseInt($("rad").value, 10)}); $("officeMsg").textContent = "Saved."; }
+  try { await api("/office", {lat: parseFloat($("lat").value), lng: parseFloat($("lng").value), radius: parseInt($("rad").value, 10), maxAcc: parseInt($("maxAcc").value, 10)}); $("officeMsg").textContent = "Saved."; }
   catch (e) { $("officeMsg").textContent = e.message; }
 };
 
 async function loadEmps() {
   const list = await api("/employees");
   $("emps").innerHTML = list.map(e => `<tr><td>${esc(e.name)}</td><td>${esc(e.dept) || "–"}</td>
-    <td>${e.enrolled ? '<span class="pill ok">Enrolled</span>' : "Waiting. Code: <b>" + esc(e.code) + "</b>"}</td>
+    <td>${e.enrolled ? '<span class="pill ok">Enrolled</span> ' + esc(e.device) : "Waiting. Code: <b>" + esc(e.code) + "</b>"}</td>
     <td><button class="ghost" data-reset="${e.id}">New code / reset phone</button></td></tr>`).join("");
 }
 $("emps").onclick = async e => {
@@ -173,15 +174,20 @@ async function showTrip(id) {
     L.circleMarker([p.lat, p.lng], {radius: 2.5, weight: 1, color, fillColor: color, fillOpacity: 1}).bindTooltip(hm(p.t) + " ±" + p.acc + " m" + (p.mock ? " (mock)" : !p.ver ? " (unverified)" : "")).addTo(layer);
   });
   // Clock-in and clock-out, each with a ring showing how accurate the reading was.
-  const clockMark = (label, color, lat, lng, acc, when, d) => {
+  const selfie = kind => {
+    if (!t.photos.includes(kind)) return "None";
+    const url = "/admin/api/photo/" + a.id + "/" + kind;
+    return `<a href="${url}" target="_blank"><img src="${url}" alt="Selfie" style="height:96px;border-radius:6px;display:block"></a>`;
+  };
+  const clockMark = (label, color, lat, lng, acc, when, d, kind) => {
     L.circle([lat, lng], {radius: acc, color, weight: 1, fillOpacity: 0.15}).addTo(layer);
     L.circleMarker([lat, lng], {radius: 9, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1})
       .bindTooltip(label + ", " + hm(when) + ", " + d + " m from the office, ±" + acc + " m", {permanent: true, direction: "top"}).addTo(layer);
     ll.push([lat, lng]);
-    return `<tr><td><span style="color:${color}">●</span> ${label}</td><td>${hm(when)}</td><td>${d} m</td><td>±${acc} m</td><td>${lat.toFixed(6)}, ${lng.toFixed(6)}</td></tr>`;
+    return `<tr><td><span style="color:${color}">●</span> ${label}</td><td>${hm(when)}</td><td>${d} m</td><td>±${acc} m</td><td>${lat.toFixed(6)}, ${lng.toFixed(6)}</td><td>${selfie(kind)}</td></tr>`;
   };
-  let clockRows = clockMark("Clock-in", "#1f7a54", a.in_lat, a.in_lng, a.in_acc, a.in_at, a.in_dist);
-  if (a.out_at) clockRows += clockMark("Clock-out", "#7a3fb0", a.out_lat, a.out_lng, a.out_acc, a.out_at, a.out_dist);
+  let clockRows = clockMark("Clock-in", "#1f7a54", a.in_lat, a.in_lng, a.in_acc, a.in_at, a.in_dist, "in");
+  if (a.out_at) clockRows += clockMark("Clock-out", "#7a3fb0", a.out_lat, a.out_lng, a.out_acc, a.out_at, a.out_dist, "out");
   $("tripClock").innerHTML = clockRows;
   if (ll.length) map.fitBounds(ll, {padding: [40, 40], maxZoom: 18});
   setTimeout(() => map.invalidateSize(), 50);
@@ -199,7 +205,7 @@ async function showTrip(id) {
 
 async function loadAlerts() {
   const list = await api("/alerts");
-  $("alerts").innerHTML = list.length ? list.map(a => `<tr><td>${new Date(a.at).toLocaleString()}</td><td>${esc(a.name) || "–"}</td><td>${esc(a.text)}</td></tr>`).join("") : '<tr><td colspan="3">Nothing blocked so far.</td></tr>';
+  $("alerts").innerHTML = list.length ? list.map(a => `<tr><td>${new Date(a.at).toLocaleString()}</td><td>${esc(a.name) || "–"}</td><td>${esc(a.text)}</td></tr>`).join("") : '<tr><td colspan="3">No alerts so far.</td></tr>';
 }
 loadOffice(); loadEmps(); loadAtt(); loadAlerts();
 </script>

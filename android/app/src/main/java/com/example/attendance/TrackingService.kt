@@ -5,13 +5,19 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -41,6 +47,22 @@ class TrackingService : Service() {
     private val buffer = ArrayList<JSONObject>()
     private val uploadLock = Mutex()
     private var running = false
+    private val pendingEvents = ArrayList<JSONObject>()
+    private var locationOn = true
+    private var watchingSetting = false
+
+    // Tells the manager when location is switched off (or back on) while clocked in.
+    private val settingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = checkLocationSetting()
+    }
+
+    private fun checkLocationSetting() {
+        val on = LocationManagerCompat.isLocationEnabled(getSystemService(LocationManager::class.java))
+        if (on == locationOn) return
+        locationOn = on
+        pendingEvents.add(JSONObject().put("type", if (on) "location_on" else "location_off").put("t", System.currentTimeMillis()))
+        scope.launch { upload() }
+    }
 
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -84,6 +106,11 @@ class TrackingService : Service() {
                 .setMinUpdateIntervalMillis(15_000)
                 .build()
             fused.requestLocationUpdates(request, callback, Looper.getMainLooper())
+            ContextCompat.registerReceiver(
+                this, settingReceiver, IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            watchingSetting = true
+            checkLocationSetting()
             scope.launch {
                 while (isActive) {
                     delay(5 * 60_000L)
@@ -116,9 +143,18 @@ class TrackingService : Service() {
         )
     }
 
-    /** Sends buffered points in batches. On any failure the rest stay buffered for the next try. */
+    /** Sends location on/off events, then buffered points in batches. On any failure the rest wait for the next try. */
     private suspend fun upload(): Unit = uploadLock.withLock {
         val token = Prefs(this).token ?: return@withLock
+        while (pendingEvents.isNotEmpty()) {
+            val event = pendingEvents.first()
+            try {
+                Api.io { Api.event(token, event) }
+                pendingEvents.remove(event)
+            } catch (e: Exception) {
+                return@withLock
+            }
+        }
         while (buffer.isNotEmpty()) {
             val batch = buffer.take(MAX_BATCH)
             try {
@@ -144,6 +180,7 @@ class TrackingService : Service() {
 
     override fun onDestroy() {
         fused.removeLocationUpdates(callback)
+        if (watchingSetting) unregisterReceiver(settingReceiver)
         scope.cancel()
         super.onDestroy()
     }

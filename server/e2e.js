@@ -2,6 +2,7 @@
 // against it. Play Integrity can't be reached from here, so the first server
 // runs in test mode and a second one checks that strict mode blocks.
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -41,9 +42,10 @@ async function enroll(base, name, dept) {
   return "Bearer " + e.json.token;
 }
 const nonce = async (base, auth) => (await call(base, "GET", "/api/nonce", { auth })).json.nonce;
+const selfie = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), crypto.randomBytes(3000)]);
 // 1 millionth of a degree of latitude is about 0.11 m. The office is at 10,76.
 async function clock(base, auth, action, latE6, extra) {
-  return call(base, "POST", "/api/clock", { auth, body: { action, latE6, lngE6: 76000000, acc: 12, mock: false, serverNonce: await nonce(base, auth), integrityToken: "", ...extra } });
+  return call(base, "POST", "/api/clock", { auth, body: { action, latE6, lngE6: 76000000, acc: 12, mock: false, serverNonce: await nonce(base, auth), integrityToken: "", photo: selfie.toString("base64"), ...extra } });
 }
 async function track(base, auth, points) {
   return call(base, "POST", "/api/track", { auth, body: { serverNonce: await nonce(base, auth), integrityToken: "", points } });
@@ -61,19 +63,37 @@ async function main() {
   // Enrollment
   assert.strictEqual((await call(base, "POST", "/api/enroll", { body: { code: "00000000" } })).status, 400);
   const added = await call(base, "POST", "/admin/api/employees", { auth: adminAuth, body: { name: "Asha", dept: "Sales" } });
-  const enrolled = await call(base, "POST", "/api/enroll", { body: { code: added.json.code } });
+  const enrolled = await call(base, "POST", "/api/enroll", { body: { code: added.json.code, device: "Google sdk_gphone64 <b>" } });
   assert.strictEqual(enrolled.json.name, "Asha");
+  assert((await alerts(base)).includes("Enrolled a phone: Google sdk_gphone64 b"), "the manager sees each enrollment and the phone model");
+  assert.strictEqual((await call(base, "GET", "/admin/api/employees", { auth: adminAuth })).json[0].device, "Google sdk_gphone64 b");
   assert.strictEqual((await call(base, "POST", "/api/enroll", { body: { code: added.json.code } })).status, 400, "a code works once");
   const auth = "Bearer " + enrolled.json.token;
   assert.strictEqual((await call(base, "GET", "/api/me")).status, 401);
 
   // Nothing works until the office is set
-  assert.strictEqual((await clock(base, auth, "in", 10000000)).status, 409);
+  let r = await clock(base, auth, "in", 10000000);
+  assert.strictEqual(r.status, 409);
   assert.strictEqual((await call(base, "POST", "/admin/api/office", { auth: adminAuth, body: { lat: 10, lng: 76, radius: 5 } })).status, 400);
   assert.strictEqual((await call(base, "POST", "/admin/api/office", { auth: adminAuth, body: { lat: 10, lng: 76, radius: 100 } })).status, 200);
+  assert.strictEqual((await call(base, "GET", "/admin/api/office", { auth: adminAuth })).json.maxAcc, 50, "accuracy limit starts at 50 m");
+  assert.strictEqual((await call(base, "POST", "/admin/api/office", { auth: adminAuth, body: { lat: 10, lng: 76, radius: 100, maxAcc: 5 } })).status, 400);
+  assert.strictEqual((await call(base, "POST", "/admin/api/office", { auth: adminAuth, body: { lat: 10, lng: 76, radius: 100, maxAcc: 40 } })).status, 200);
+
+  // A selfie is required, and it must be a real JPEG
+  r = await clock(base, auth, "in", 10000000, { photo: undefined });
+  assert.strictEqual(r.status, 400);
+  assert(r.json.error.includes("selfie"));
+  assert.strictEqual((await clock(base, auth, "in", 10000000, { photo: Buffer.alloc(3000).toString("base64") })).status, 400);
+
+  // The manager's accuracy limit
+  r = await clock(base, auth, "in", 10000000, { acc: 45 });
+  assert.strictEqual(r.status, 400);
+  assert(r.json.error.includes("too imprecise"));
+  assert((await alerts(base)).some(t => t.includes("GPS too imprecise (±45 m, limit ±40 m)")));
 
   // Requirement 3: clock-in is blocked outside the radius
-  let r = await clock(base, auth, "in", 10010000);
+  r = await clock(base, auth, "in", 10010000);
   assert.strictEqual(r.status, 403);
   assert(r.json.error.includes("from the office"));
   assert((await alerts(base)).some(t => t.includes("Tried to clock in")));
@@ -85,7 +105,6 @@ async function main() {
   assert((await alerts(base)).some(t => t.includes("mock location")));
 
   // Other refusals
-  assert.strictEqual((await clock(base, auth, "in", 10000000, { acc: 500 })).status, 400);
   assert.strictEqual((await clock(base, auth, "out", 10000000)).status, 409, "can't clock out before clocking in");
   const usedNonce = await nonce(base, auth);
   await clock(base, auth, "in", 10010000, { serverNonce: usedNonce });
@@ -125,6 +144,14 @@ async function main() {
   assert.strictEqual(r.json.stored, 0, "a repeated upload adds nothing");
   assert((await alerts(base)).some(t => t.includes("Trip upload contained 1 mock")));
 
+  // Switching location off while clocked in is reported to the manager
+  const event = body => call(base, "POST", "/api/event", { auth, body });
+  assert.strictEqual((await event({ type: "nonsense", t: now })).status, 400);
+  assert.strictEqual((await event({ type: "location_off", t: now + 1 })).status, 200);
+  await event({ type: "location_off", t: now + 1 }); // sent twice, counted once
+  await event({ type: "location_on", t: now + 2 });
+  assert((await alerts(base)).filter(t => t.includes("Switched off location")).length === 1);
+
   let trip = (await call(base, "GET", "/admin/api/trip/" + id, { auth: adminAuth })).json;
   assert.strictEqual(trip.points.length, 4);
   assert(trip.stats.distanceM > 1000, "travelled about 1.1 km");
@@ -133,6 +160,13 @@ async function main() {
   assert(trip.flags.some(f => f.includes("not verified")), "test mode records unverified points and flags them");
   assert.strictEqual(trip.attendance.name, "Asha");
   assert.strictEqual(trip.attendance.dept, "Sales");
+  assert(trip.flags.some(f => f.includes("switched off 1 time(s)")));
+  assert.deepStrictEqual(trip.events.map(e => e.type), ["location_off", "location_on"]);
+  assert.deepStrictEqual(trip.photos, ["in"]);
+  const photoRes = await fetch(base + "/admin/api/photo/" + id + "/in", { headers: { Authorization: adminAuth } });
+  assert.strictEqual(photoRes.headers.get("content-type"), "image/jpeg");
+  assert(Buffer.from(await photoRes.arrayBuffer()).equals(selfie), "the manager sees the exact selfie");
+  assert.strictEqual((await fetch(base + "/admin/api/photo/" + id + "/in")).status, 401, "selfies need the dashboard password");
 
   // Requirement 3: clock-out outside the radius is allowed but flagged
   r = await clock(base, auth, "out", 10010000);
@@ -148,11 +182,13 @@ async function main() {
   assert(Array.isArray(row.stats.gaps));
   trip = (await call(base, "GET", "/admin/api/trip/" + id, { auth: adminAuth })).json;
   assert(trip.flags.some(f => f.includes("Clocked out")), "the trip panel shows the same flags as the table");
+  assert.deepStrictEqual(trip.photos.sort(), ["in", "out"]);
   assert.strictEqual(typeof trip.attendance.out_lat, "number", "clock-out position is available for the map");
 
   // Resetting a phone signs the old one out
   await call(base, "POST", "/admin/api/employees/" + row.employee_id + "/reset", { auth: adminAuth, body: {} });
   assert.strictEqual((await call(base, "GET", "/api/me", { auth })).status, 401);
+  assert.strictEqual((await call(base, "POST", "/api/event", { auth, body: { type: "location_off", t: now } })).status, 401);
 
   // Too many wrong dashboard passwords are refused, even if the password is then right
   for (let i = 0; i < 20; i++) await call(base, "GET", "/admin/api/office", { auth: "Basic " + Buffer.from("x:wrong" + i).toString("base64") });

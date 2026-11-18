@@ -1,10 +1,10 @@
 const assert = require("assert");
-const { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats } = require("./lib");
+const { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats, shiftFlags, jpegFrom } = require("./lib");
 assert(Math.abs(dist(0, 0, 0, 1) - 111195) < 200, "1 degree of longitude at the equator is about 111 km");
 assert.strictEqual(nonceFor(["a", "in", 1, 2, 3]), nonceFor(["a", "in", 1, 2, 3]));
 assert.notStrictEqual(nonceFor(["a", "in", 1, 2, 3]), nonceFor(["a", "in", 1, 2, 4]));
 // The same values are checked against the app's code in android/app/src/test.
-assert.strictEqual(nonceFor(["abc", "in", 10000000, 76000000, 12]), "1krGc6a0mkE9rbxXp5Znu39i9npaelZj8OaTxiK_f9I");
+assert.strictEqual(nonceFor(["abc", "in", 10000000, 76000000, 12, "/9j/AA=="]), "jVAY1Ad9u2Kf1aHGcGAMnbZRoMirR1K_WiTsLNoI3N0");
 const keyed = pointKey({ t: 1700000000000, latE6: 10000000, lngE6: -76000000, acc: 8, mock: false });
 assert.strictEqual(keyed, "1700000000000,10000000,-76000000,8,0");
 assert.strictEqual(nonceFor(["abc", "track", keyed]), "mV774Uq6mKwJNbbmJ-EJIZCyaRuEnkTORxr43vW1O-Q");
@@ -61,4 +61,24 @@ assert.strictEqual(tripStats([at(0, 10)], office, true, t0 + 5 * 60000).gaps.len
 assert.strictEqual(tripStats([at(0, 10)], office, false, t0 + 60 * 60000).gaps.length, 0);
 assert.strictEqual(tripStats(trip, null, false, t0).awayMs, 0, "works before the office is set");
 assert.strictEqual(tripStats([], office, true, t0).distanceM, 0);
+
+// Whole-shift flags
+const shift = { in_at: t0, out_at: t0 + 8 * 3600000 };
+const noGaps = { gaps: [] };
+assert.deepStrictEqual(shiftFlags(shift, noGaps, [], t0), []);
+assert.deepStrictEqual(shiftFlags(shift, { gaps: [{ from: t0, to: t0 + 20 * 60000 }] }, [], t0), [], "a 20-minute gap is shown but not flagged");
+assert(shiftFlags(shift, { gaps: [{ from: t0, to: t0 + 20 * 60000 }, { from: t0 + 3600000, to: t0 + 3600000 + 45 * 60000 }] }, [], t0)[0].startsWith("1 gap(s) of over 30 min with no location, the longest 45 min"));
+assert(shiftFlags(shift, noGaps, [{ t: t0, type: "location_off" }, { t: t0 + 1, type: "location_on" }, { t: t0 + 2, type: "location_off" }], t0)[0].includes("switched off 2 time(s)"));
+assert(shiftFlags({ in_at: t0, out_at: t0 + 13 * 3600000 }, noGaps, [], t0)[0].includes("Shift lasted 13.0 hours"));
+assert(shiftFlags({ in_at: t0, out_at: null }, noGaps, [], t0 + 15 * 3600000)[0].includes("Still clocked in after 15.0 hours"));
+assert.deepStrictEqual(shiftFlags({ in_at: t0, out_at: null }, noGaps, [], t0 + 3600000), []);
+
+// Selfies
+const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(2000)]);
+assert(jpegFrom(jpeg.toString("base64")).equals(jpeg));
+assert.strictEqual(jpegFrom(undefined), null);
+assert.strictEqual(jpegFrom(""), null);
+assert.strictEqual(jpegFrom(Buffer.alloc(2000).toString("base64")), null, "not a JPEG");
+assert.strictEqual(jpegFrom(Buffer.from([0xff, 0xd8]).toString("base64")), null, "too small");
+assert.strictEqual(jpegFrom("A".repeat(400001)), null, "too large");
 console.log("lib tests passed");

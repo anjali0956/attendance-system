@@ -47,7 +47,7 @@ npm ci --omit=dev
 # Remove that line once the app is installed from Google Play and the Google setup is done.
 cat > /etc/attendance.env <<ENV
 ADMIN_PASSWORD=${PASS}
-PACKAGE_NAME=com.example.attendance
+PACKAGE_NAME=io.github.anjali0956.attendance
 ALLOW_UNVERIFIED=1
 DB_FILE=/var/lib/attendance/attendance.db
 HOST=127.0.0.1

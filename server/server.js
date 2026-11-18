@@ -2,13 +2,14 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const Database = require("better-sqlite3");
-const { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats } = require("./lib");
+const { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats, shiftFlags, jpegFrom } = require("./lib");
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1"; // only Caddy, on this same machine, may connect directly
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const PACKAGE_NAME = process.env.PACKAGE_NAME || "com.example.attendance";
+const PACKAGE_NAME = process.env.PACKAGE_NAME || "io.github.anjali0956.attendance";
 const ALLOW_UNVERIFIED = process.env.ALLOW_UNVERIFIED === "1";
+const DEFAULT_MAX_ACC = 50; // worst GPS accuracy accepted for clocking, unless the manager changes it
 if (!ADMIN_PASSWORD) { console.error("Set ADMIN_PASSWORD before starting."); process.exit(1); }
 if (ALLOW_UNVERIFIED) console.warn("WARNING: ALLOW_UNVERIFIED=1. Play Integrity failures will not block clocking. Use for testing only.");
 
@@ -21,16 +22,25 @@ CREATE TABLE IF NOT EXISTS attendance(id INTEGER PRIMARY KEY, employee_id INTEGE
   out_at INTEGER, out_lat REAL, out_lng REAL, out_acc INTEGER, out_dist INTEGER, out_flags TEXT DEFAULT '[]');
 CREATE TABLE IF NOT EXISTS points(id INTEGER PRIMARY KEY, attendance_id INTEGER NOT NULL, t INTEGER, lat REAL, lng REAL, acc INTEGER, mock INTEGER DEFAULT 0, ver INTEGER DEFAULT 0);
 CREATE UNIQUE INDEX IF NOT EXISTS pts_att ON points(attendance_id, t);
+CREATE TABLE IF NOT EXISTS events(attendance_id INTEGER NOT NULL, t INTEGER NOT NULL, type TEXT NOT NULL, PRIMARY KEY(attendance_id, t, type));
+CREATE TABLE IF NOT EXISTS photos(attendance_id INTEGER NOT NULL, kind TEXT NOT NULL, jpeg BLOB NOT NULL, PRIMARY KEY(attendance_id, kind));
 CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY, employee_id INTEGER, created INTEGER);
 CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY, employee_id INTEGER, at INTEGER, text TEXT);
 CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY, value TEXT);
 `);
+// Added after the first release: the phone model each employee enrolled on.
+if (!db.prepare("PRAGMA table_info(employees)").all().some(c => c.name === "device")) db.exec("ALTER TABLE employees ADD COLUMN device TEXT DEFAULT ''");
 
 const sha = s => crypto.createHash("sha256").update(s).digest("hex");
 const q = sql => db.prepare(sql);
-const getOffice = () => { const r = q("SELECT value FROM config WHERE key='office'").get(); return r ? JSON.parse(r.value) : null; };
+const getOffice = () => { const r = q("SELECT value FROM config WHERE key='office'").get(); return r ? { maxAcc: DEFAULT_MAX_ACC, ...JSON.parse(r.value) } : null; };
 const openShift = id => q("SELECT * FROM attendance WHERE employee_id=? AND out_at IS NULL ORDER BY id DESC LIMIT 1").get(id);
 const alertFor = (empId, text) => q("INSERT INTO alerts(employee_id,at,text) VALUES(?,?,?)").run(empId, Date.now(), text);
+// The shift that uploads from the phone belong to: the open one, or one that ended in the last 10 minutes.
+const recentShift = (empId, now) => {
+  const att = q("SELECT * FROM attendance WHERE employee_id=? ORDER BY id DESC LIMIT 1").get(empId);
+  return att && !(att.out_at && now - att.out_at > 10 * 60000) ? att : null;
+};
 
 function takeNonce(n, empId) {
   const r = q("SELECT * FROM nonces WHERE nonce=? AND employee_id=?").get(String(n || ""), empId);
@@ -62,7 +72,7 @@ async function verifyIntegrity(token, expectedNonce) {
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "256kb" }));
+app.use(express.json({ limit: "512kb" })); // a clock-in carries a selfie
 
 // Express 4 doesn't catch errors in async handlers, and an uncaught one stops the server.
 const safe = fn => (req, res, next) => fn(req, res, next).catch(next);
@@ -86,10 +96,12 @@ const limited = ip => {
 app.post("/api/enroll", (req, res) => {
   if (limited(req.ip)) return res.status(429).json({ error: "Too many attempts. Try again later." });
   const code = String((req.body || {}).code || "").trim();
+  const device = String((req.body || {}).device || "").replace(/[^\w .,()+-]/g, "").slice(0, 80);
   const e = code && q("SELECT * FROM employees WHERE enroll_code=? AND active=1").get(code);
   if (!e) return res.status(400).json({ error: "That code isn't valid." });
   const token = crypto.randomBytes(32).toString("hex");
-  q("UPDATE employees SET token=?, enroll_code=NULL WHERE id=?").run(sha(token), e.id);
+  q("UPDATE employees SET token=?, enroll_code=NULL, device=? WHERE id=?").run(sha(token), device, e.id);
+  alertFor(e.id, "Enrolled a phone" + (device ? ": " + device : ""));
   res.json({ token, name: e.name });
 });
 
@@ -103,19 +115,24 @@ app.get("/api/nonce", auth, (req, res) => {
 });
 
 app.post("/api/clock", auth, safe(async (req, res) => {
-  const { action, latE6, lngE6, acc, mock, serverNonce, integrityToken } = req.body || {};
+  const { action, latE6, lngE6, acc, mock, serverNonce, integrityToken, photo } = req.body || {};
   if (!["in", "out"].includes(action) || ![latE6, lngE6, acc].every(Number.isInteger) || !validCoords(latE6, lngE6)) return res.status(400).json({ error: "Bad request" });
+  const jpeg = jpegFrom(photo);
+  if (!jpeg) return res.status(400).json({ error: "A selfie is needed to clock in and out. Update the app and try again." });
   if (!takeNonce(serverNonce, req.emp.id)) return res.status(400).json({ error: "Request expired. Try again." });
   if (mock) {
     alertFor(req.emp.id, "Blocked clock-" + action + ": phone reported a mock location");
     return res.status(403).json({ error: "Your phone reports a mock location. Turn off any fake-GPS app and try again." });
   }
-  if (acc > 150) return res.status(400).json({ error: "Your location is too imprecise (±" + acc + " m). Move near a window and try again." });
   const office = getOffice();
   if (!office) return res.status(409).json({ error: "The manager hasn't set the office location yet." });
+  if (acc > office.maxAcc) {
+    alertFor(req.emp.id, "Clock-" + action + " refused: GPS too imprecise (±" + acc + " m, limit ±" + office.maxAcc + " m)");
+    return res.status(400).json({ error: "Your location is too imprecise (±" + acc + " m). Move near a window, wait a few seconds and try again." });
+  }
 
   const flags = [];
-  const integ = await verifyIntegrity(integrityToken, nonceFor([serverNonce, action, latE6, lngE6, acc]));
+  const integ = await verifyIntegrity(integrityToken, nonceFor([serverNonce, action, latE6, lngE6, acc, photo]));
   if (!integ.ok) {
     alertFor(req.emp.id, "Clock-" + action + " attempt failed verification: " + integ.reason);
     if (!ALLOW_UNVERIFIED) return res.status(403).json({ error: "This phone can't be verified. " + integ.reason + "." });
@@ -124,6 +141,7 @@ app.post("/api/clock", auth, safe(async (req, res) => {
 
   const lat = latE6 / 1e6, lng = lngE6 / 1e6, d = Math.round(dist(lat, lng, office.lat, office.lng)), off = d > office.radius;
   const cur = openShift(req.emp.id), now = Date.now();
+  const savePhoto = (attId, kind) => q("INSERT OR REPLACE INTO photos(attendance_id,kind,jpeg) VALUES(?,?,?)").run(attId, kind, jpeg);
   if (action === "in") {
     if (cur) return res.status(409).json({ error: "You are already clocked in." });
     if (off) {
@@ -133,12 +151,14 @@ app.post("/api/clock", auth, safe(async (req, res) => {
     const r = q("INSERT INTO attendance(employee_id,in_at,in_lat,in_lng,in_acc,in_dist,in_flags) VALUES(?,?,?,?,?,?,?)")
       .run(req.emp.id, now, lat, lng, acc, d, JSON.stringify(flags));
     q("INSERT OR IGNORE INTO points(attendance_id,t,lat,lng,acc,mock,ver) VALUES(?,?,?,?,?,0,?)").run(r.lastInsertRowid, now, lat, lng, acc, integ.ok ? 1 : 0);
+    savePhoto(r.lastInsertRowid, "in");
     return res.json({ ok: true, message: "Clocked in. Location verified (" + d + " m from the office)." });
   }
   if (!cur) return res.status(409).json({ error: "You are not clocked in." });
   if (off) flags.push("Clocked out " + d + " m from the office");
   q("UPDATE attendance SET out_at=?,out_lat=?,out_lng=?,out_acc=?,out_dist=?,out_flags=? WHERE id=?").run(now, lat, lng, acc, d, JSON.stringify(flags), cur.id);
   q("INSERT OR IGNORE INTO points(attendance_id,t,lat,lng,acc,mock,ver) VALUES(?,?,?,?,?,0,?)").run(cur.id, now, lat, lng, acc, integ.ok ? 1 : 0);
+  savePhoto(cur.id, "out");
   res.json({ ok: true, message: "Clocked out." + (off ? " You were " + d + " m from the office, so this was flagged for your manager." : "") });
 }));
 
@@ -147,8 +167,8 @@ app.post("/api/track", auth, safe(async (req, res) => {
   if (!Array.isArray(points) || !points.length || points.length > 200 || !points.every(validPoint)) return res.status(400).json({ error: "Bad request" });
   if (!takeNonce(serverNonce, req.emp.id)) return res.status(400).json({ error: "Request expired." });
   const now = Date.now();
-  const att = q("SELECT * FROM attendance WHERE employee_id=? ORDER BY id DESC LIMIT 1").get(req.emp.id);
-  if (!att || (att.out_at && now - att.out_at > 10 * 60000)) return res.json({ ok: true, stored: 0 });
+  const att = recentShift(req.emp.id, now);
+  if (!att) return res.json({ ok: true, stored: 0 });
   const integ = await verifyIntegrity(integrityToken, nonceFor([serverNonce, "track", ...points.map(pointKey)]));
   const ver = integ.ok ? 1 : 0;
   // OR IGNORE: if the phone never got our reply it sends the same points again.
@@ -167,6 +187,18 @@ app.post("/api/track", auth, safe(async (req, res) => {
   res.json({ ok: true, stored });
 }));
 
+// The phone reports when location is switched off or back on while clocked in.
+app.post("/api/event", auth, (req, res) => {
+  const { type, t } = req.body || {};
+  if (!["location_off", "location_on"].includes(type) || !Number.isInteger(t)) return res.status(400).json({ error: "Bad request" });
+  const now = Date.now(), att = recentShift(req.emp.id, now);
+  if (!att) return res.json({ ok: true });
+  const at = Math.min(Math.max(t, att.in_at), att.out_at || now);
+  const added = q("INSERT OR IGNORE INTO events(attendance_id,t,type) VALUES(?,?,?)").run(att.id, at, type).changes;
+  if (added && type === "location_off") alertFor(req.emp.id, "Switched off location while clocked in");
+  res.json({ ok: true });
+});
+
 // ---- Manager dashboard ----
 const adminFails = new Map();
 function admin(req, res, next) {
@@ -184,14 +216,14 @@ function admin(req, res, next) {
 const api = express.Router();
 api.get("/office", (req, res) => res.json(getOffice()));
 api.post("/office", (req, res) => {
-  const { lat, lng, radius } = req.body || {};
-  if (![lat, lng, radius].every(Number.isFinite) || radius < 30 || radius > 2000 || Math.abs(lat) > 90 || Math.abs(lng) > 180)
-    return res.status(400).json({ error: "Enter a valid latitude, longitude and a radius of 30 to 2000 m." });
-  q("INSERT INTO config(key,value) VALUES('office',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify({ lat, lng, radius }));
+  const { lat, lng, radius, maxAcc = DEFAULT_MAX_ACC } = req.body || {};
+  if (![lat, lng, radius, maxAcc].every(Number.isFinite) || radius < 30 || radius > 2000 || maxAcc < 10 || maxAcc > 150 || Math.abs(lat) > 90 || Math.abs(lng) > 180)
+    return res.status(400).json({ error: "Enter a valid latitude and longitude, a radius of 30 to 2000 m, and an accuracy limit of 10 to 150 m." });
+  q("INSERT INTO config(key,value) VALUES('office',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify({ lat, lng, radius, maxAcc }));
   res.json({ ok: true });
 });
 const newCode = () => String(crypto.randomInt(10000000, 100000000));
-api.get("/employees", (req, res) => res.json(q("SELECT id,name,dept,enroll_code AS code,token IS NOT NULL AS enrolled FROM employees WHERE active=1 ORDER BY name").all()));
+api.get("/employees", (req, res) => res.json(q("SELECT id,name,dept,device,enroll_code AS code,token IS NOT NULL AS enrolled FROM employees WHERE active=1 ORDER BY name").all()));
 api.post("/employees", (req, res) => {
   const name = String((req.body || {}).name || "").trim(), dept = String((req.body || {}).dept || "").trim();
   if (!name) return res.status(400).json({ error: "Enter a name." });
@@ -201,25 +233,37 @@ api.post("/employees", (req, res) => {
 });
 api.post("/employees/:id/reset", (req, res) => {
   const code = newCode();
-  q("UPDATE employees SET enroll_code=?, token=NULL WHERE id=?").run(code, req.params.id);
+  q("UPDATE employees SET enroll_code=?, token=NULL, device='' WHERE id=?").run(code, req.params.id);
   res.json({ code });
 });
 const pointsOf = id => q("SELECT t,lat,lng,acc,mock,ver FROM points WHERE attendance_id=? ORDER BY t").all(id);
-const flagsOf = (r, pts) => [...JSON.parse(r.in_flags), ...JSON.parse(r.out_flags), ...analyze(pts)];
+const eventsOf = id => q("SELECT t,type FROM events WHERE attendance_id=? ORDER BY t").all(id);
+// Everything the manager needs to judge one shift.
+function review(r, office) {
+  const pts = pointsOf(r.id), stats = tripStats(pts, office, !r.out_at), events = eventsOf(r.id);
+  const flags = [...JSON.parse(r.in_flags), ...JSON.parse(r.out_flags), ...analyze(pts), ...shiftFlags(r, stats, events)];
+  return { pts, stats, events, flags };
+}
 api.get("/attendance", (req, res) => {
   const from = Number(req.query.from) || 0, to = Number(req.query.to) || Date.now() + 86400000;
   const rows = q("SELECT a.*,e.name,e.dept FROM attendance a JOIN employees e ON e.id=a.employee_id WHERE a.in_at>=? AND a.in_at<? ORDER BY a.in_at DESC LIMIT 500").all(from, to);
   const office = getOffice();
   res.json(rows.map(r => {
-    const pts = pointsOf(r.id);
-    return { ...r, points: pts.length, flags: flagsOf(r, pts), stats: tripStats(pts, office, !r.out_at) };
+    const { pts, stats, flags } = review(r, office);
+    return { ...r, points: pts.length, flags, stats };
   }));
 });
 api.get("/trip/:id", (req, res) => {
   const a = q("SELECT a.*,e.name,e.dept FROM attendance a JOIN employees e ON e.id=a.employee_id WHERE a.id=?").get(req.params.id);
   if (!a) return res.status(404).json({ error: "Not found" });
-  const pts = pointsOf(a.id), office = getOffice();
-  res.json({ attendance: a, points: pts, flags: flagsOf(a, pts), stats: tripStats(pts, office, !a.out_at), office });
+  const office = getOffice(), { pts, stats, events, flags } = review(a, office);
+  const photos = q("SELECT kind FROM photos WHERE attendance_id=?").all(a.id).map(p => p.kind);
+  res.json({ attendance: a, points: pts, flags, stats, events, photos, office });
+});
+api.get("/photo/:id/:kind", (req, res) => {
+  const p = q("SELECT jpeg FROM photos WHERE attendance_id=? AND kind=?").get(req.params.id, req.params.kind);
+  if (!p) return res.status(404).json({ error: "Not found" });
+  res.set("Cache-Control", "private, max-age=86400").type("jpeg").send(p.jpeg);
 });
 api.get("/alerts", (req, res) => res.json(q("SELECT al.at,al.text,e.name FROM alerts al LEFT JOIN employees e ON e.id=al.employee_id ORDER BY al.id DESC LIMIT 50").all()));
 

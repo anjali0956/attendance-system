@@ -84,4 +84,23 @@ function tripStats(pts, office, open, now = Date.now()) {
   };
 }
 
-module.exports = { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats };
+// Flags about the shift as a whole. stats: from tripStats. events: [{t, type}] sent by the phone.
+function shiftFlags(att, stats, events, now = Date.now()) {
+  const out = [];
+  const long = stats.gaps.filter(g => g.to - g.from > 30 * 60000);
+  if (long.length) out.push(long.length + " gap(s) of over 30 min with no location, the longest " + Math.round(Math.max(...long.map(g => g.to - g.from)) / 60000) + " min");
+  const offs = events.filter(e => e.type === "location_off").length;
+  if (offs) out.push("Location was switched off " + offs + " time(s) while clocked in");
+  const hours = ((att.out_at || now) - att.in_at) / 3600000;
+  if (hours > 12) out.push((att.out_at ? "Shift lasted " : "Still clocked in after ") + hours.toFixed(1) + " hours. Check for a forgotten clock-out");
+  return out;
+}
+
+// The selfie sent with a clock-in or clock-out: base64 JPEG. Returns the bytes, or null if it isn't one.
+function jpegFrom(b64) {
+  if (typeof b64 !== "string" || b64.length > 400000) return null;
+  const b = Buffer.from(b64, "base64");
+  return b.length >= 1000 && b[0] === 0xff && b[1] === 0xd8 ? b : null;
+}
+
+module.exports = { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats, shiftFlags, jpegFrom };

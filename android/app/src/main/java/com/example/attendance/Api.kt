@@ -30,9 +30,10 @@ object Api {
 
     suspend fun <T> io(f: () -> T): T = withContext(Dispatchers.IO) { f() }
 
-    fun enroll(code: String) = call("/api/enroll", null, JSONObject().put("code", code))
+    fun enroll(code: String, device: String) = call("/api/enroll", null, JSONObject().put("code", code).put("device", device))
     fun me(token: String) = call("/api/me", token, null)
     fun nonce(token: String) = call("/api/nonce", token, null)
     fun clock(token: String, body: JSONObject) = call("/api/clock", token, body)
     fun track(token: String, body: JSONObject) = call("/api/track", token, body)
+    fun event(token: String, body: JSONObject) = call("/api/event", token, body)
 }

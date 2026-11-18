@@ -16,6 +16,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.util.Base64
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
@@ -29,10 +30,22 @@ class MainActivity : AppCompatActivity() {
     private var afterPermission: (() -> Unit)? = null
 
     private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-            if (grants[Manifest.permission.ACCESS_FINE_LOCATION] == true) afterPermission?.invoke()
-            else say("Location permission is required to clock in and out.")
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            if (has(Manifest.permission.ACCESS_FINE_LOCATION) && has(Manifest.permission.CAMERA)) afterPermission?.invoke()
+            else say("Precise location and camera permission are required to clock in and out.")
             afterPermission = null
+        }
+
+    private val selfieLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+            val file = SelfieActivity.file(this)
+            if (r.resultCode == RESULT_OK && file.exists()) {
+                val photo = file.readBytes()
+                file.delete()
+                clock(photo)
+            } else {
+                say(r.data?.getStringExtra(SelfieActivity.EXTRA_ERROR) ?: "A selfie is needed to clock in and out.")
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,7 +58,9 @@ class MainActivity : AppCompatActivity() {
         enrollBtn = findViewById(R.id.enroll)
         clockBtn = findViewById(R.id.clock)
         enrollBtn.setOnClickListener { enroll() }
-        clockBtn.setOnClickListener { withPermissions { clock() } }
+        clockBtn.setOnClickListener {
+            withPermissions { selfieLauncher.launch(Intent(this, SelfieActivity::class.java)) }
+        }
     }
 
     override fun onResume() {
@@ -56,9 +71,9 @@ class MainActivity : AppCompatActivity() {
     private fun say(text: String?) { message.text = text.orEmpty() }
 
     private fun withPermissions(then: () -> Unit) {
-        val needed = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        val needed = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.CAMERA)
         if (Build.VERSION.SDK_INT >= 33) needed.add(Manifest.permission.POST_NOTIFICATIONS)
-        val missing = needed.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        val missing = needed.filter { !has(it) }
         if (missing.isEmpty()) then()
         else { afterPermission = then; permissionLauncher.launch(missing.toTypedArray()) }
     }
@@ -97,8 +112,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun hasLocationPermission() =
-        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    private fun has(permission: String) =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun hasLocationPermission() = has(Manifest.permission.ACCESS_FINE_LOCATION)
 
     private fun enroll() {
         val code = codeField.text.toString().trim()
@@ -106,7 +123,7 @@ class MainActivity : AppCompatActivity() {
         enrollBtn.isEnabled = false
         lifecycleScope.launch {
             try {
-                val r = Api.io { Api.enroll(code) }
+                val r = Api.io { Api.enroll(code, "${Build.MANUFACTURER} ${Build.MODEL}") }
                 prefs.token = r.getString("token")
                 prefs.name = r.getString("name")
                 say("This phone is enrolled.")
@@ -121,8 +138,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun clock() {
+    private fun clock(photo: ByteArray) {
         val token = prefs.token ?: return
+        val photoB64 = Base64.getEncoder().encodeToString(photo)
         val action = if (clockedIn) "out" else "in"
         clockBtn.isEnabled = false
         lifecycleScope.launch {
@@ -142,7 +160,7 @@ class MainActivity : AppCompatActivity() {
                 val nonce = Api.io { Api.nonce(token) }.getString("nonce")
                 val integrity = if (mock) null else Integrity.token(
                     this@MainActivity,
-                    Integrity.nonceFor(listOf(nonce, action, latE6.toString(), lngE6.toString(), acc.toString()))
+                    Integrity.nonceFor(listOf(nonce, action, latE6.toString(), lngE6.toString(), acc.toString(), photoB64))
                 )
                 val body = JSONObject()
                     .put("action", action)
@@ -152,6 +170,7 @@ class MainActivity : AppCompatActivity() {
                     .put("mock", mock)
                     .put("serverNonce", nonce)
                     .put("integrityToken", integrity ?: "")
+                    .put("photo", photoB64)
                 val r = Api.io { Api.clock(token, body) }
 
                 clockedIn = action == "in"

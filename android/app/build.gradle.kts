@@ -8,15 +8,24 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.attendance"   // must match PACKAGE_NAME on the server
+        applicationId = "io.github.anjali0956.attendance"   // must match PACKAGE_NAME on the server
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
-        // CHANGE THESE TWO before building.
         buildConfigField("String", "SERVER_URL", "\"https://139.59.6.181.sslip.io\"")
         buildConfigField("long", "CLOUD_PROJECT_NUMBER", "0L") // Google Cloud project number linked in Play Console
+    }
+
+    signingConfigs {
+        create("release") {
+            // The GitHub Actions workflow supplies these from the repository's secrets.
+            storeFile = System.getenv("SIGNING_KEYSTORE")?.let { file(it) }
+            storePassword = System.getenv("SIGNING_PASSWORD")
+            keyAlias = "upload"
+            keyPassword = System.getenv("SIGNING_PASSWORD")
+        }
     }
 
     buildFeatures { buildConfig = true }
@@ -25,7 +34,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildTypes { release { isMinifyEnabled = false } }
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
 }
 
 dependencies {
@@ -38,5 +52,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
     testImplementation("junit:junit:4.13.2")
 }
