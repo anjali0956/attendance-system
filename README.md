@@ -7,6 +7,12 @@ Two parts:
 
 Tests: `npm test` in `server/` runs the logic tests and an end-to-end run of the server. GitHub Actions runs these and the Android unit tests, and builds the APK, on every push to `main`.
 
+## What it does
+
+- **Branches and teams.** Each employee belongs to one branch and one team. Clocking in and out is allowed anywhere; the distance from the employee's branch is recorded. The dashboard's Overview and Attendance pages filter by date, branch (or all branches) and team.
+- **Customer visits.** While clocked in, an employee taps **Start customer visit**, picks a customer from the nearest ones or adds a new one (name and place; its location is where the employee is), and taps **End visit** when leaving. A visit that starts or ends more than 150 m from the customer's saved location is flagged. The manager can correct customers on the **Customers** page.
+- **Reports.** The Overview shows totals, visits over 7 days, check-in coverage, branch and team activity, recent visits and location exceptions. The **Employee report** shows one employee's day: each customer visited in order, on a map with the path.
+
 ## How the anti-spoofing works
 
 1. The app refuses to use a stale or imprecise fix. A fix Android marks as a mock location is sent to the server, which refuses it and shows the attempt to the manager.

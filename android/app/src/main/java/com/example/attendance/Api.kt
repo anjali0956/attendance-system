@@ -36,4 +36,7 @@ object Api {
     fun clock(token: String, body: JSONObject) = call("/api/clock", token, body)
     fun track(token: String, body: JSONObject) = call("/api/track", token, body)
     fun event(token: String, body: JSONObject) = call("/api/event", token, body)
+    fun customers(token: String, latE6: Long, lngE6: Long) = call("/api/customers?latE6=$latE6&lngE6=$lngE6", token, null)
+    fun visitStart(token: String, body: JSONObject) = call("/api/visit/start", token, body)
+    fun visitEnd(token: String, body: JSONObject) = call("/api/visit/end", token, body)
 }

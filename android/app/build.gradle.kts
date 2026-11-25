@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.anjali0956.attendance"   // must match PACKAGE_NAME on the server
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
 
         buildConfigField("String", "SERVER_URL", "\"https://139.59.6.181.sslip.io\"")
         buildConfigField("long", "CLOUD_PROJECT_NUMBER", "0L") // Google Cloud project number linked in Play Console

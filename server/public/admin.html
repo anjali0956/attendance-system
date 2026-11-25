@@ -6,81 +6,223 @@
 <title>Attendance admin</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
-:root{--bg:#f3f5f2;--surface:#fff;--ink:#1b2a2f;--muted:#66767a;--line:#d9e0dc;--ok:#1f7a54;--okbg:#dff1e7;--bad:#a02727;--badbg:#f6dcdc}
-@media (prefers-color-scheme:dark){:root{--bg:#101a1d;--surface:#17252a;--ink:#e8efec;--muted:#93a5a8;--line:#27393e;--ok:#58c796;--okbg:#17382b;--bad:#f09a9a;--badbg:#3d1d1d}}
+:root{--bg:#f3f5f2;--surface:#fff;--ink:#1b2a2f;--muted:#66767a;--line:#d9e0dc;--ok:#1f7a54;--okbg:#dff1e7;--bad:#a02727;--badbg:#f6dcdc;--warn:#8a5a00;--warnbg:#fbecc9;--series:#2c6fbb;--track:#e3e8e5;--band:#1d3b57;--bandink:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#101a1d;--surface:#17252a;--ink:#e8efec;--muted:#93a5a8;--line:#27393e;--ok:#58c796;--okbg:#17382b;--bad:#f09a9a;--badbg:#3d1d1d;--warn:#f0c36a;--warnbg:#3a2d12;--series:#6ea8e8;--track:#27393e;--band:#1f3a52;--bandink:#e8efec}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:1500px;margin:0 auto;padding:20px 16px 48px}
-h1{font-size:26px;margin:0 0 16px}h2{font-size:18px;margin:0 0 10px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+h1{font-size:26px;margin:0 0 12px}h2{font-size:18px;margin:0 0 10px}h3{font-size:15px;margin:16px 0 6px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;min-width:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
 .row>div{flex:1 1 140px}
+.grid2{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px}
+@media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}}
 label{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}
-input{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+input,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+td select{width:auto;padding:4px 6px}
 button{font:inherit;background:var(--ink);color:var(--surface);border:0;border-radius:6px;padding:8px 14px;cursor:pointer}
 button.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+button.link{background:none;color:var(--series);padding:0;text-decoration:underline}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+nav button{background:none;color:var(--ink);border:1px solid var(--line)}
+nav button[aria-current="page"]{background:var(--ink);color:var(--surface)}
 .scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:820px}
+table{width:100%;border-collapse:collapse}
+.wide{min-width:820px}
 th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
 th{font-size:13px;color:var(--muted);font-weight:500}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .pill{display:inline-block;border-radius:99px;padding:1px 9px;font-size:13px}
-.ok{background:var(--okbg);color:var(--ok)}.bad{background:var(--badbg);color:var(--bad)}
+.ok{background:var(--okbg);color:var(--ok)}.bad{background:var(--badbg);color:var(--bad)}.warn{background:var(--warnbg);color:var(--warn)}
 .msg{color:var(--muted);font-size:13px;margin:8px 0 0;min-height:19px}
-#map{height:380px;border-radius:8px;border:1px solid var(--line);margin:10px 0}
+.map{height:400px;border-radius:8px;border:1px solid var(--line);margin:10px 0}
 ul{margin:6px 0 0;padding-left:20px}
 [hidden]{display:none!important}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--band);color:var(--bandink);border-radius:10px;padding:20px 8px;margin-bottom:16px}
+.tiles>div{padding:0 20px;border-left:1px solid rgba(255,255,255,.2)}.tiles>div:first-child{border-left:0}
+.tiles b{display:block;font-size:40px;line-height:1.1;margin:4px 0;font-variant-numeric:tabular-nums}
+.tiles span{font-size:14px;opacity:.85}
+@media (max-width:700px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:16px}.tiles>div:nth-child(3){border-left:0}}
+.chart{position:relative}
+.chart svg{display:block;width:100%;overflow:visible}
+.chart text{fill:var(--muted);font-size:12px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surface);font-size:13px;padding:4px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-115%)}
+.headline{display:flex;gap:24px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+.headline b{font-size:28px;font-variant-numeric:tabular-nums}
+.donut{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.donut b{font-size:26px;display:block;font-variant-numeric:tabular-nums}
+.attention{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.attention .pill{font-size:15px;align-self:start}
+details{margin-top:8px;font-size:14px}summary{cursor:pointer;color:var(--series)}
+.vnum span{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--surface);font:600 12px system-ui;border:2px solid var(--surface)}
 </style>
 </head>
 <body>
 <main>
 <h1>Attendance admin</h1>
+<nav id="tabs">
+  <button data-tab="overview">Overview</button>
+  <button data-tab="attendance">Attendance</button>
+  <button data-tab="report">Employee report</button>
+  <button data-tab="customers">Customers</button>
+  <button data-tab="settings">Settings</button>
+</nav>
 
-<div class="card">
-  <h2>Office location</h2>
+<div class="card" id="filters">
   <div class="row">
-    <div><label for="lat">Latitude</label><input id="lat" type="number" step="any"></div>
-    <div><label for="lng">Longitude</label><input id="lng" type="number" step="any"></div>
-    <div><label for="rad">Radius (metres)</label><input id="rad" type="number" value="100" min="30" max="2000"></div>
-    <div><label for="maxAcc">Worst GPS accuracy allowed (metres)</label><input id="maxAcc" type="number" value="50" min="10" max="150"></div>
-    <button class="ghost" id="here">Use my location</button>
-    <button id="saveOffice">Save</button>
+    <div><label for="date">Date</label><input id="date" type="date"></div>
+    <div><label for="fBranch">Branch</label><select id="fBranch"></select></div>
+    <div><label for="fTeam">Team</label><select id="fTeam"></select></div>
+    <button id="apply">Apply</button>
   </div>
-  <p class="msg" id="officeMsg">Clock-ins and clock-outs with a less accurate GPS reading are refused. Raise it if employees inside the office are often refused.</p>
 </div>
 
-<div class="card">
-  <h2>Employees</h2>
-  <div class="row">
-    <div><label for="ename">Name</label><input id="ename"></div>
-    <div><label for="edept">Department</label><input id="edept"></div>
-    <button id="addEmp">Add employee</button>
+<!-- Overview -->
+<section data-page="overview">
+  <div class="tiles">
+    <div><span>Active employees</span><b id="tActive">–</b><span>In the selected branch and team</span></div>
+    <div><span>Checked in</span><b id="tChecked">–</b><span>On the selected date</span></div>
+    <div><span>Customer visits</span><b id="tVisits">–</b><span>On the selected date</span></div>
+    <div><span>With a customer now</span><b id="tEngaged">–</b><span>Visits in progress</span></div>
   </div>
-  <p class="msg" id="empMsg">Give the enrollment code to the employee. They enter it once in the app.</p>
-  <div class="scroll"><table><thead><tr><th>Name</th><th>Department</th><th>Phone</th><th></th></tr></thead><tbody id="emps"></tbody></table></div>
-</div>
+  <div class="grid2">
+    <div class="card">
+      <h2>Visit activity</h2>
+      <div class="headline"><div><b id="weekVisits">–</b><br><span class="msg">Visits in 7 days</span></div><div class="msg" id="weekCompare"></div></div>
+      <div class="chart" id="visitChart"></div>
+      <details><summary>View chart values</summary><table><thead><tr><th>Day</th><th class="num">Visits</th></tr></thead><tbody id="visitValues"></tbody></table></details>
+      <p class="msg" id="withVisits"></p>
+    </div>
+    <div class="card">
+      <h2>Check-in coverage</h2>
+      <div class="donut"><div class="chart" id="coverChart" style="width:150px"></div>
+        <div><b id="covIn">–</b><span class="msg">checked in</span><b id="covOut" style="margin-top:8px">–</b><span class="msg">with no check-in</span></div></div>
+      <h3>Needs attention</h3>
+      <div class="attention"><div>Clock-outs left open from earlier days<div class="msg">Check for forgotten clock-outs</div></div><span class="pill warn" id="attOpen">0</span></div>
+      <div class="attention"><div>Shifts with flags on this date<div class="msg"><button class="link" data-goto="attendance">Review attendance</button></div></div><span class="pill warn" id="attFlagged">0</span></div>
+    </div>
+  </div>
+  <div class="card" id="branchCard">
+    <h2>Branch activity</h2>
+    <div class="scroll"><table class="wide"><thead><tr><th>Branch</th><th class="num">Active employees</th><th>Check-in coverage</th><th class="num">Employees with visits</th><th class="num">Visits</th></tr></thead><tbody id="branchRows"></tbody></table></div>
+  </div>
+  <div class="card">
+    <h2>Team activity</h2>
+    <div class="scroll"><table class="wide"><thead><tr><th>Team</th><th class="num">Active employees</th><th>Check-in coverage</th><th class="num">Employees with visits</th><th class="num">Visits</th></tr></thead><tbody id="teamRows"></tbody></table></div>
+  </div>
+  <div class="card">
+    <h2>Recent visits</h2>
+    <div class="scroll"><table class="wide"><thead><tr><th>Started</th><th>Customer</th><th>Place</th><th>Employee</th><th>Team</th><th>Branch</th><th>Status</th><th></th></tr></thead><tbody id="recentRows"></tbody></table></div>
+  </div>
+  <div class="card">
+    <h2>Location exceptions</h2>
+    <p class="msg" style="margin-top:0">People clocked in right now whose location looks wrong.</p>
+    <div class="scroll"><table class="wide"><thead><tr><th>Employee</th><th>Branch</th><th>Team</th><th>Exception</th><th>Checked in</th><th>Last location update</th><th></th></tr></thead><tbody id="exceptionRows"></tbody></table></div>
+  </div>
+  <div class="card">
+    <h2>Alerts and blocked attempts</h2>
+    <div class="scroll"><table style="min-width:500px"><thead><tr><th>When</th><th>Employee</th><th>What happened</th></tr></thead><tbody id="alerts"></tbody></table></div>
+  </div>
+</section>
 
-<div class="card">
-  <h2>Attendance</h2>
-  <div class="row"><div><label for="date">Date</label><input id="date" type="date"></div><button class="ghost" id="reload">Refresh</button></div>
-  <div class="scroll"><table>
-    <thead><tr><th>Name</th><th>Department</th><th>In</th><th>In distance and accuracy</th><th>Out</th><th>Out distance and accuracy</th><th>Hours</th><th>Travelled</th><th>Away</th><th>Gaps</th><th>Checks</th><th>Trip</th></tr></thead>
-    <tbody id="rows"></tbody></table></div>
-  <p class="msg" id="none" hidden>No records for this date.</p>
-</div>
+<!-- Attendance -->
+<section data-page="attendance">
+  <div class="card">
+    <h2>Attendance</h2>
+    <div class="scroll"><table class="wide">
+      <thead><tr><th>Name</th><th>Branch</th><th>Team</th><th>In</th><th>In: distance from branch, accuracy</th><th>Out</th><th>Out: distance from branch, accuracy</th><th>Hours</th><th>Travelled</th><th>Away</th><th>Gaps</th><th>Checks</th><th>Trip</th></tr></thead>
+      <tbody id="rows"></tbody></table></div>
+    <p class="msg" id="none" hidden>No records for this date.</p>
+  </div>
+  <div class="card" id="trip" hidden>
+    <div class="row"><h2 id="tripHead" style="flex:1 1 auto;margin:0"></h2><button class="ghost" id="tripClose" style="flex:0 0 auto">Close</button></div>
+    <div class="map" id="tripMap"></div>
+    <p class="msg" id="tripStats"></p>
+    <div class="scroll"><table style="min-width:600px"><thead><tr><th></th><th>Time</th><th>Distance from branch</th><th>GPS accuracy</th><th>Position</th><th>Selfie</th></tr></thead><tbody id="tripClock"></tbody></table></div>
+    <div id="tripGaps"></div>
+    <div id="tripFlags"></div>
+  </div>
+</section>
 
-<div class="card" id="trip" hidden>
-  <div class="row"><h2 id="tripHead" style="flex:1 1 auto;margin:0"></h2><button class="ghost" id="tripClose" style="flex:0 0 auto">Close</button></div>
-  <div id="map"></div>
-  <p class="msg" id="tripStats"></p>
-  <div class="scroll"><table style="min-width:600px"><thead><tr><th></th><th>Time</th><th>Distance from office</th><th>GPS accuracy</th><th>Position</th><th>Selfie</th></tr></thead><tbody id="tripClock"></tbody></table></div>
-  <div id="tripGaps"></div>
-  <div id="tripFlags"></div>
-</div>
+<!-- Employee report -->
+<section data-page="report">
+  <div class="card">
+    <h2>Employee report</h2>
+    <div class="row">
+      <div><label for="rEmp">Employee</label><select id="rEmp"></select></div>
+      <div><label for="rDate">Date</label><input id="rDate" type="date"></div>
+      <button id="rShow">Show</button>
+    </div>
+    <p class="msg" id="rMsg"></p>
+  </div>
+  <div id="report" hidden>
+    <div class="card">
+      <h2 id="rHead"></h2>
+      <div class="map" id="reportMap"></div>
+      <p class="msg">Numbers on the map are customer visits in order. The blue line is the path, dashed grey lines are gaps with no location.</p>
+      <h3>Customer visits</h3>
+      <div class="scroll"><table class="wide"><thead><tr><th>#</th><th>Customer</th><th>Place</th><th>Start</th><th>End</th><th>Time spent</th><th>Distance from customer (start, end)</th><th>GPS accuracy</th><th>Checks</th></tr></thead><tbody id="rVisits"></tbody></table></div>
+      <h3>Clock-in and clock-out</h3>
+      <div class="scroll"><table class="wide"><thead><tr><th>In</th><th>Out</th><th>Hours</th><th>Travelled</th><th>Away</th><th>Gaps</th><th>Selfies</th><th>Checks</th></tr></thead><tbody id="rShifts"></tbody></table></div>
+    </div>
+  </div>
+</section>
 
-<div class="card">
-  <h2>Alerts and blocked attempts</h2>
-  <div class="scroll"><table style="min-width:500px"><thead><tr><th>When</th><th>Employee</th><th>What happened</th></tr></thead><tbody id="alerts"></tbody></table></div>
-</div>
+<!-- Customers -->
+<section data-page="customers">
+  <div class="card">
+    <h2>Customers</h2>
+    <p class="msg" style="margin-top:0">Employees add a customer the first time they visit; its location is where they were. Correct a location here if it's wrong.</p>
+    <div class="row"><div><label for="cSearch">Search</label><input id="cSearch" placeholder="Name or place"></div></div>
+    <div class="scroll"><table class="wide"><thead><tr><th>Name</th><th>Place</th><th>Location</th><th class="num">Visits</th><th>Last visit</th><th>Added by</th><th></th></tr></thead><tbody id="cRows"></tbody></table></div>
+  </div>
+  <div class="card" id="cEdit" hidden>
+    <h2>Edit customer</h2>
+    <div class="row">
+      <div><label for="cName">Name</label><input id="cName"></div>
+      <div><label for="cPlace">Place</label><input id="cPlace"></div>
+      <div><label for="cLat">Latitude</label><input id="cLat" type="number" step="any"></div>
+      <div><label for="cLng">Longitude</label><input id="cLng" type="number" step="any"></div>
+      <button id="cSave">Save</button><button class="ghost" id="cCancel">Cancel</button>
+    </div>
+    <p class="msg" id="cMsg"></p>
+  </div>
+</section>
+
+<!-- Settings -->
+<section data-page="settings">
+  <div class="card">
+    <h2>Branches</h2>
+    <div class="scroll"><table class="wide"><thead><tr><th>Name</th><th>Location</th><th class="num">Radius</th><th class="num">Worst GPS accuracy allowed</th><th></th></tr></thead><tbody id="bRows"></tbody></table></div>
+    <h3 id="bFormHead">Add a branch</h3>
+    <div class="row">
+      <div><label for="bName">Name</label><input id="bName"></div>
+      <div><label for="bLat">Latitude</label><input id="bLat" type="number" step="any"></div>
+      <div><label for="bLng">Longitude</label><input id="bLng" type="number" step="any"></div>
+      <div><label for="bRad">Radius (metres)</label><input id="bRad" type="number" value="100" min="30" max="2000"></div>
+      <div><label for="bAcc">Worst GPS accuracy allowed (metres)</label><input id="bAcc" type="number" value="50" min="10" max="150"></div>
+      <button class="ghost" id="bHere">Use my location</button><button id="bSave">Save</button><button class="ghost" id="bCancel" hidden>Cancel</button>
+    </div>
+    <p class="msg" id="bMsg">The radius is used to work out time away from the branch. Clocking in and out is allowed anywhere; clocks with a less accurate GPS reading than the limit are refused.</p>
+  </div>
+  <div class="card">
+    <h2>Teams</h2>
+    <div class="scroll"><table style="min-width:400px"><tbody id="tmRows"></tbody></table></div>
+    <div class="row" style="margin-top:10px"><div><label for="tmName">New team</label><input id="tmName"></div><button id="tmAdd">Add team</button></div>
+    <p class="msg" id="tmMsg"></p>
+  </div>
+  <div class="card">
+    <h2>Employees</h2>
+    <div class="row">
+      <div><label for="eName">Name</label><input id="eName"></div>
+      <div><label for="eBranch">Branch</label><select id="eBranch"></select></div>
+      <div><label for="eTeam">Team</label><select id="eTeam"></select></div>
+      <button id="eAdd">Add employee</button>
+    </div>
+    <p class="msg" id="empMsg">Give the enrollment code to the employee. They enter it once in the app.</p>
+    <div class="scroll"><table class="wide"><thead><tr><th>Name</th><th>Branch</th><th>Team</th><th>Phone</th><th></th></tr></thead><tbody id="emps"></tbody></table></div>
+  </div>
+</section>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -91,123 +233,312 @@ const pad = n => String(n).padStart(2, "0");
 const hm = t => new Date(t).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
 const km = m => (m / 1000).toFixed(2) + " km";
 const dur = ms => { const min = Math.round(ms / 60000); return min < 60 ? min + " min" : Math.floor(min / 60) + " h " + (min % 60) + " min"; };
+const dash = v => v == null ? "–" : v;
+const DAY = 86400000;
 async function api(path, body) {
   const r = await fetch("/admin/api" + path, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : undefined);
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || "Request failed");
   return j;
 }
-const today = () => { const d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
-$("date").value = today();
+const isoDay = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const dayStart = input => new Date(input.value + "T00:00:00").getTime();
+$("date").value = $("rDate").value = isoDay(new Date());
+const flagPill = flags => flags.length
+  ? `<span class="pill bad" title="${esc(flags.join("; "))}">Review (${flags.length})</span>` : '<span class="pill ok">No flags</span>';
+const flagList = flags => flags.length
+  ? '<span class="pill bad">Review</span><ul>' + flags.map(f => "<li>" + esc(f) + "</li>").join("") + "</ul>" : '<span class="pill ok">No anomalies found</span>';
 
-async function loadOffice() {
-  const o = await api("/office");
-  if (o) { $("lat").value = o.lat; $("lng").value = o.lng; $("rad").value = o.radius; $("maxAcc").value = o.maxAcc; }
+// ---- Tabs ----
+let page = "overview";
+function show(p) {
+  page = p;
+  document.querySelectorAll("[data-page]").forEach(s => s.hidden = s.dataset.page !== p);
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === p ? "page" : "false"));
+  $("filters").hidden = !["overview", "attendance"].includes(p);
+  ({overview: loadOverview, attendance: loadAtt, customers: loadCustomers, settings: loadSettings, report: () => {}})[p]();
 }
-$("here").onclick = () => navigator.geolocation.getCurrentPosition(
-  p => { $("lat").value = p.coords.latitude.toFixed(6); $("lng").value = p.coords.longitude.toFixed(6); $("officeMsg").textContent = "Position filled in (±" + Math.round(p.coords.accuracy) + " m). Press Save."; },
-  () => { $("officeMsg").textContent = "Couldn’t read your location. Type the coordinates instead."; });
-$("saveOffice").onclick = async () => {
-  try { await api("/office", {lat: parseFloat($("lat").value), lng: parseFloat($("lng").value), radius: parseInt($("rad").value, 10), maxAcc: parseInt($("maxAcc").value, 10)}); $("officeMsg").textContent = "Saved."; }
-  catch (e) { $("officeMsg").textContent = e.message; }
-};
+$("tabs").onclick = e => { if (e.target.dataset.tab) show(e.target.dataset.tab); };
+document.body.addEventListener("click", e => { if (e.target.dataset.goto) show(e.target.dataset.goto); });
+$("apply").onclick = () => show(page);
 
-async function loadEmps() {
-  const list = await api("/employees");
-  $("emps").innerHTML = list.map(e => `<tr><td>${esc(e.name)}</td><td>${esc(e.dept) || "–"}</td>
-    <td>${e.enrolled ? '<span class="pill ok">Enrolled</span> ' + esc(e.device) : "Waiting. Code: <b>" + esc(e.code) + "</b>"}</td>
-    <td><button class="ghost" data-reset="${e.id}">New code / reset phone</button></td></tr>`).join("");
+// ---- Branches, teams and employees for the menus ----
+let branches = [], teams = [], employees = [];
+async function loadLists() {
+  [branches, teams, employees] = await Promise.all([api("/branches"), api("/teams"), api("/employees")]);
+  const opts = (list, all, none) => (all ? `<option value="all">${all}</option>` : "") + list.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("") + (none ? `<option value="${none[0]}">${none[1]}</option>` : "");
+  const keep = (id, html) => { const v = $(id).value; $(id).innerHTML = html; if ([...$(id).options].some(o => o.value === v)) $(id).value = v; };
+  keep("fBranch", opts(branches, "All branches", ["none", "Not assigned"]));
+  keep("fTeam", opts(teams, "All teams", ["none", "Not assigned"]));
+  keep("eBranch", opts(branches, null, ["", "Not assigned"]));
+  keep("eTeam", opts(teams, null, ["", "Not assigned"]));
+  keep("rEmp", employees.map(e => `<option value="${e.id}">${esc(e.name)}${e.branch ? " (" + esc(e.branch) + ")" : ""}</option>`).join(""));
 }
-$("emps").onclick = async e => {
-  const id = e.target.dataset.reset;
-  if (!id || !confirm("This signs the employee out of their current phone and creates a new enrollment code. Continue?")) return;
-  const r = await api("/employees/" + id + "/reset", {});
-  $("empMsg").textContent = "New enrollment code: " + r.code; loadEmps();
-};
-$("addEmp").onclick = async () => {
-  try { const r = await api("/employees", {name: $("ename").value, dept: $("edept").value}); $("empMsg").textContent = "Added. Enrollment code: " + r.code; $("ename").value = ""; $("edept").value = ""; loadEmps(); }
-  catch (e) { $("empMsg").textContent = e.message; }
-};
+const filterQuery = () => "from=" + dayStart($("date")) + "&branch=" + $("fBranch").value + "&team=" + $("fTeam").value;
 
-let rows = [];
-async function loadAtt() {
-  const from = new Date($("date").value + "T00:00:00").getTime();
-  rows = await api("/attendance?from=" + from + "&to=" + (from + 86400000));
-  $("none").hidden = rows.length > 0;
-  $("rows").innerHTML = rows.map((r, i) => `<tr><td>${esc(r.name)}</td><td>${esc(r.dept) || "–"}</td>
-    <td>${hm(r.in_at)}</td><td>${r.in_dist} m, ±${r.in_acc} m</td>
-    <td>${r.out_at ? hm(r.out_at) : "Still in"}</td><td>${r.out_at ? r.out_dist + " m, ±" + r.out_acc + " m" : "–"}</td>
-    <td>${(((r.out_at || Date.now()) - r.in_at) / 36e5).toFixed(2)}</td>
-    <td>${km(r.stats.distanceM)}</td><td>${dur(r.stats.awayMs)}</td>
-    <td>${r.stats.gaps.length ? `<span class="pill bad">${r.stats.gaps.length} (${dur(r.stats.gapMs)})</span>` : "None"}</td>
-    <td>${r.flags.length ? `<span class="pill bad" title="${esc(r.flags.join("; "))}">Review (${r.flags.length})</span>` : '<span class="pill ok">No flags</span>'}</td>
-    <td><button class="ghost" data-trip="${r.id}">View trip</button></td></tr>`).join("");
-}
-$("date").onchange = loadAtt; $("reload").onclick = () => { loadAtt(); loadAlerts(); };
-$("rows").onclick = e => { if (e.target.dataset.trip) showTrip(e.target.dataset.trip); };
-$("tripClose").onclick = () => { $("trip").hidden = true; };
-
-let map, layer;
-async function showTrip(id) {
-  const t = await api("/trip/" + id), pts = t.points, a = t.attendance;
-  $("trip").hidden = false;
-  $("tripHead").textContent = a.name + " · " + hm(a.in_at) + " to " + (a.out_at ? hm(a.out_at) : "now");
-  if (!map) { map = L.map("map"); L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19, attribution: "© OpenStreetMap contributors"}).addTo(map); }
-  if (layer) layer.remove();
-  layer = L.layerGroup().addTo(map);
-  const ll = pts.map(p => [p.lat, p.lng]);
-  if (t.office) { L.circle([t.office.lat, t.office.lng], {radius: t.office.radius, color: "#66767a", dashArray: "6 5", fill: false}).addTo(layer); ll.push([t.office.lat, t.office.lng]); }
-  // A solid line where points arrived, and a dashed grey one across each gap, where the route is unknown.
-  const isGap = (a, b) => t.stats.gaps.some(g => g.from === a.t && g.to === b.t);
-  let run = [];
-  pts.forEach((p, i) => {
-    if (i && isGap(pts[i - 1], p)) {
-      L.polyline(run, {color: "#2c6fbb", weight: 3}).addTo(layer);
-      L.polyline([run[run.length - 1], [p.lat, p.lng]], {color: "#66767a", weight: 2, dashArray: "4 8"}).bindTooltip("No location received, " + hm(pts[i - 1].t) + " to " + hm(p.t)).addTo(layer);
-      run = [];
-    }
-    run.push([p.lat, p.lng]);
-  });
-  if (run.length) L.polyline(run, {color: "#2c6fbb", weight: 3}).addTo(layer);
-  pts.forEach(p => {
-    const color = p.mock ? "#c0392b" : !p.ver ? "#e08e0b" : "#2c6fbb";
-    L.circleMarker([p.lat, p.lng], {radius: 2.5, weight: 1, color, fillColor: color, fillOpacity: 1}).bindTooltip(hm(p.t) + " ±" + p.acc + " m" + (p.mock ? " (mock)" : !p.ver ? " (unverified)" : "")).addTo(layer);
-  });
-  // Clock-in and clock-out, each with a ring showing how accurate the reading was.
-  const selfie = kind => {
-    if (!t.photos.includes(kind)) return "None";
-    const url = "/admin/api/photo/" + a.id + "/" + kind;
-    return `<a href="${url}" target="_blank"><img src="${url}" alt="Selfie" style="height:96px;border-radius:6px;display:block"></a>`;
+// ---- Charts ----
+// One series, so no legend: the card title names it. Hover shows the exact value; "View chart values" is the table view.
+function lineChart(el, data) {
+  const w = Math.max(el.clientWidth, 280), h = 240, L0 = 34, R = 16, T = 22, B = 26;
+  const top = Math.max(...data.map(d => d.v)), max = top <= 4 ? 4 : top <= 10 ? 10 : Math.ceil(top / 10) * 10; // halves stay whole numbers
+  const x = i => L0 + i * (w - L0 - R) / (data.length - 1), y = v => T + (h - T - B) * (1 - v / max);
+  const line = data.map((d, i) => (i ? "L" : "M") + x(i) + " " + y(d.v)).join("");
+  const grid = [0, max / 2, max].map(v => `<line x1="${L0}" x2="${w - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L0 - 8}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join("");
+  const last = data.length - 1;
+  el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" height="${h}" role="img" aria-label="Visits per day">${grid}
+    <path d="${line}L${x(last)} ${y(0)}L${x(0)} ${y(0)}Z" fill="var(--series)" opacity=".12"/>
+    <path d="${line}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round"/>
+    ${data.map((d, i) => `<circle cx="${x(i)}" cy="${y(d.v)}" r="4" fill="var(--series)" stroke="var(--surface)" stroke-width="2"/>`).join("")}
+    ${data.map((d, i) => `<text x="${x(i)}" y="${h - 6}" text-anchor="middle">${esc(d.label)}</text>`).join("")}
+    <text x="${x(last)}" y="${y(data[last].v) - 10}" text-anchor="middle" style="fill:var(--ink);font-weight:600">${data[last].v}</text>
+    <line id="cross" y1="${T}" y2="${h - B}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>
+    <rect x="0" y="0" width="${w}" height="${h}" fill="transparent"/></svg><div class="tip" hidden></div>`;
+  const svg = el.querySelector("svg"), tip = el.querySelector(".tip"), cross = el.querySelector("#cross");
+  svg.onmousemove = e => {
+    const px = (e.clientX - svg.getBoundingClientRect().left) * w / svg.getBoundingClientRect().width;
+    const i = Math.max(0, Math.min(last, Math.round((px - L0) / ((w - L0 - R) / last))));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+    tip.hidden = false; tip.textContent = data[i].label + ": " + data[i].v + " visit" + (data[i].v === 1 ? "" : "s");
+    tip.style.left = x(i) / w * 100 + "%"; tip.style.top = y(data[i].v) + "px";
   };
-  const clockMark = (label, color, lat, lng, acc, when, d, kind) => {
-    L.circle([lat, lng], {radius: acc, color, weight: 1, fillOpacity: 0.15}).addTo(layer);
-    L.circleMarker([lat, lng], {radius: 9, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1})
-      .bindTooltip(label + ", " + hm(when) + ", " + d + " m from the office, ±" + acc + " m", {permanent: true, direction: "top"}).addTo(layer);
-    ll.push([lat, lng]);
-    return `<tr><td><span style="color:${color}">●</span> ${label}</td><td>${hm(when)}</td><td>${d} m</td><td>±${acc} m</td><td>${lat.toFixed(6)}, ${lng.toFixed(6)}</td><td>${selfie(kind)}</td></tr>`;
-  };
-  let clockRows = clockMark("Clock-in", "#1f7a54", a.in_lat, a.in_lng, a.in_acc, a.in_at, a.in_dist, "in");
-  if (a.out_at) clockRows += clockMark("Clock-out", "#7a3fb0", a.out_lat, a.out_lng, a.out_acc, a.out_at, a.out_dist, "out");
-  $("tripClock").innerHTML = clockRows;
-  if (ll.length) map.fitBounds(ll, {padding: [40, 40], maxZoom: 18});
-  setTimeout(() => map.invalidateSize(), 50);
-  const s = t.stats;
-  $("tripStats").textContent = pts.length + (pts.length === 1 ? " point · " : " points · ") + km(s.distanceM) + " travelled · " + dur(s.awayMs) + " away from the office" + (t.office ? " · farthest " + s.farthestM + " m from the office" : "") + " · " + (s.gaps.length ? dur(s.gapMs) + " with no location" : "no gaps") + ". Red points are mock locations, orange points were not verified by Play Integrity.";
-  $("tripGaps").innerHTML = s.gaps.length
-    ? '<p style="margin:12px 0 0"><b>Gaps where no location was received</b></p><ul>' + s.gaps.map(g => "<li>" + hm(g.from) + " to " + (g.ongoing ? "now" : hm(g.to)) + " (" + dur(g.to - g.from) + ")" + (g.ongoing ? ", nothing received since" : "") + "</li>").join("") + "</ul>"
-    : "";
-  $("tripFlags").style.marginTop = "12px";
-  $("tripFlags").innerHTML = t.flags.length
-    ? '<span class="pill bad">Review</span><ul>' + t.flags.map(f => "<li>" + esc(f) + "</li>").join("") + "</ul>"
-    : '<span class="pill ok">No anomalies found</span>';
-  $("trip").scrollIntoView({behavior: "smooth", block: "nearest"});
+  svg.onmouseleave = () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); };
 }
+// Part of a whole: the checked-in share in the series colour on a neutral track.
+function donut(el, part, total) {
+  const r = 60, c = 2 * Math.PI * r, share = total ? part / total : 0;
+  el.innerHTML = `<svg viewBox="0 0 150 150" height="150" role="img" aria-label="${part} of ${total} checked in">
+    <circle cx="75" cy="75" r="${r}" fill="none" stroke="var(--track)" stroke-width="18"><title>${total - part} with no check-in</title></circle>
+    <circle cx="75" cy="75" r="${r}" fill="none" stroke="var(--series)" stroke-width="18" stroke-dasharray="${share * c} ${c}" transform="rotate(-90 75 75)"><title>${part} checked in</title></circle>
+    <text x="75" y="82" text-anchor="middle" style="fill:var(--ink);font-size:22px;font-weight:600">${Math.round(share * 1000) / 10}%</text></svg>`;
+}
+const coverage = (n, of) => {
+  const pct = of ? Math.round(n / of * 100) : 0;
+  return `<span style="display:inline-block;width:100px;height:8px;border-radius:4px;background:var(--track);vertical-align:middle;margin-right:8px"><span style="display:block;width:${pct}%;height:8px;border-radius:4px;background:var(--series)"></span></span>${n} of ${of} (${pct}%)`;
+};
 
+// ---- Overview ----
+let lastChart = [];
+async function loadOverview() {
+  const s = await api("/summary?" + filterQuery());
+  $("tActive").textContent = s.active; $("tChecked").textContent = s.checkedIn; $("tVisits").textContent = s.visits; $("tEngaged").textContent = s.engaged;
+  const week = s.chart.reduce((a, d) => a + d.visits, 0), diff = week - s.previous;
+  $("weekVisits").textContent = week;
+  $("weekCompare").textContent = (diff > 0 ? "+" : diff < 0 ? "−" : "±") + Math.abs(diff) + " compared with the previous 7 days (" + s.previous + ")";
+  lastChart = s.chart.map(d => ({label: new Date(d.day).toLocaleDateString([], {day: "numeric", month: "short"}), v: d.visits}));
+  lineChart($("visitChart"), lastChart);
+  $("visitValues").innerHTML = lastChart.map(d => `<tr><td>${d.label}</td><td class="num">${d.v}</td></tr>`).join("");
+  $("withVisits").textContent = s.withVisits + " of " + s.active + " employees recorded visits on this date.";
+  donut($("coverChart"), s.checkedIn, s.active);
+  $("covIn").textContent = s.checkedIn; $("covOut").textContent = s.active - s.checkedIn;
+  $("attOpen").textContent = s.earlierOpen; $("attFlagged").textContent = s.flagged;
+  const groupRow = g => `<tr><td>${esc(g.name)}</td><td class="num">${g.active}</td><td>${coverage(g.checkedIn, g.active)}</td><td class="num">${g.withVisits} of ${g.active}</td><td class="num">${g.visits}</td></tr>`;
+  $("branchCard").hidden = $("fBranch").value !== "all";
+  $("branchRows").innerHTML = s.branches.map(groupRow).join("") || '<tr><td colspan="5">No employees.</td></tr>';
+  $("teamRows").innerHTML = s.teams.map(groupRow).join("") || '<tr><td colspan="5">No employees.</td></tr>';
+  const day = $("date").value;
+  $("recentRows").innerHTML = s.recentVisits.map(v => `<tr><td>${hm(v.startAt)}</td><td>${esc(v.customer)}</td><td>${esc(v.place)}</td><td>${esc(v.employee)}</td><td>${esc(dash(v.team))}</td><td>${esc(dash(v.branch))}</td>
+    <td>${v.endAt ? "Ended " + hm(v.endAt) : '<span class="pill ok">In progress</span>'}${v.flagged ? ' <span class="pill bad">Flagged</span>' : ""}</td>
+    <td><button class="link" data-report="${v.employeeId}" data-day="${day}">Open visit</button></td></tr>`).join("") || '<tr><td colspan="8">No visits on this date.</td></tr>';
+  $("exceptionRows").innerHTML = s.exceptions.map(x => `<tr><td><b>${esc(x.name)}</b></td><td>${esc(dash(x.branch))}</td><td>${esc(dash(x.team))}</td><td><span class="pill warn">${esc(x.text)}</span></td>
+    <td>${new Date(x.inAt).toLocaleString()}</td><td>${new Date(x.lastT).toLocaleString()}</td>
+    <td><button class="ghost" data-report="${x.employeeId}" data-day="${isoDay(new Date(x.inAt))}">Open report</button></td></tr>`).join("") || '<tr><td colspan="7">No location problems right now.</td></tr>';
+  loadAlerts();
+}
+window.addEventListener("resize", () => { if (page === "overview" && lastChart.length) lineChart($("visitChart"), lastChart); });
+document.body.addEventListener("click", e => {
+  const b = e.target.closest("[data-report]");
+  if (!b) return;
+  $("rEmp").value = b.dataset.report; $("rDate").value = b.dataset.day;
+  show("report"); loadReport();
+});
 async function loadAlerts() {
   const list = await api("/alerts");
   $("alerts").innerHTML = list.length ? list.map(a => `<tr><td>${new Date(a.at).toLocaleString()}</td><td>${esc(a.name) || "–"}</td><td>${esc(a.text)}</td></tr>`).join("") : '<tr><td colspan="3">No alerts so far.</td></tr>';
 }
-loadOffice(); loadEmps(); loadAtt(); loadAlerts();
+
+// ---- Maps ----
+const maps = {};
+// runs: [{points, gaps}], one per shift. marks: clock-ins and outs. visits: customer visits, numbered in order.
+function drawMap(holder, {office, runs, marks, visits}) {
+  let m = maps[holder];
+  if (!m) { m = maps[holder] = {map: L.map(holder)}; L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19, attribution: "© OpenStreetMap contributors"}).addTo(m.map); }
+  if (m.layer) m.layer.remove();
+  const layer = m.layer = L.layerGroup().addTo(m.map), ll = [];
+  if (office) { L.circle([office.lat, office.lng], {radius: office.radius, color: "#66767a", dashArray: "6 5", fill: false}).bindTooltip(esc(office.name || "Branch")).addTo(layer); ll.push([office.lat, office.lng]); }
+  for (const {points: pts, gaps} of runs) {
+    // A solid line where points arrived, and a dashed grey one across each gap, where the route is unknown.
+    const isGap = (a, b) => gaps.some(g => g.from === a.t && g.to === b.t);
+    let run = [];
+    pts.forEach((p, i) => {
+      if (i && isGap(pts[i - 1], p)) {
+        L.polyline(run, {color: "#2c6fbb", weight: 3}).addTo(layer);
+        L.polyline([run[run.length - 1], [p.lat, p.lng]], {color: "#66767a", weight: 2, dashArray: "4 8"}).bindTooltip("No location received, " + hm(pts[i - 1].t) + " to " + hm(p.t)).addTo(layer);
+        run = [];
+      }
+      run.push([p.lat, p.lng]); ll.push([p.lat, p.lng]);
+    });
+    if (run.length) L.polyline(run, {color: "#2c6fbb", weight: 3}).addTo(layer);
+    pts.forEach(p => {
+      const color = p.mock ? "#c0392b" : !p.ver ? "#e08e0b" : "#2c6fbb";
+      L.circleMarker([p.lat, p.lng], {radius: 2.5, weight: 1, color, fillColor: color, fillOpacity: 1}).bindTooltip(hm(p.t) + " ±" + p.acc + " m" + (p.mock ? " (mock)" : !p.ver ? " (unverified)" : "")).addTo(layer);
+    });
+  }
+  // Clock-in and clock-out, each with a ring showing how accurate the reading was.
+  for (const k of marks) {
+    L.circle([k.lat, k.lng], {radius: k.acc, color: k.color, weight: 1, fillOpacity: 0.15}).addTo(layer);
+    L.circleMarker([k.lat, k.lng], {radius: 9, color: "#fff", weight: 2, fillColor: k.color, fillOpacity: 1})
+      .bindTooltip(k.label + ", " + hm(k.when) + (k.dist == null ? "" : ", " + k.dist + " m from the branch") + ", ±" + k.acc + " m", {permanent: marks.length <= 2, direction: "top"}).addTo(layer);
+    ll.push([k.lat, k.lng]);
+  }
+  (visits || []).forEach((v, i) => {
+    if (v.start_dist > 150) L.polyline([[v.start_lat, v.start_lng], [v.c_lat, v.c_lng]], {color: "#a02727", weight: 2, dashArray: "2 6"}).bindTooltip("Saved location of " + esc(v.customer)).addTo(layer);
+    L.marker([v.start_lat, v.start_lng], {icon: L.divIcon({className: "vnum", html: "<span>" + (i + 1) + "</span>", iconSize: [24, 24]})})
+      .bindTooltip((i + 1) + ". " + esc(v.customer) + ", " + esc(v.place) + "<br>" + hm(v.start_at) + " to " + (v.end_at ? hm(v.end_at) : "now")).addTo(layer);
+    ll.push([v.start_lat, v.start_lng]);
+  });
+  if (ll.length) m.map.fitBounds(ll, {padding: [40, 40], maxZoom: 18}); else m.map.setView([10.5, 76.2], 8);
+  setTimeout(() => m.map.invalidateSize(), 50);
+}
+const selfie = (attId, photos, kind) => photos.includes(kind)
+  ? `<a href="/admin/api/photo/${attId}/${kind}" target="_blank"><img src="/admin/api/photo/${attId}/${kind}" alt="Selfie" style="height:96px;border-radius:6px;display:block"></a>` : "None";
+const gapsText = s => s.gaps.length ? `<span class="pill bad">${s.gaps.length} (${dur(s.gapMs)})</span>` : "None";
+const hours = a => (((a.out_at || Date.now()) - a.in_at) / 36e5).toFixed(2);
+
+// ---- Attendance ----
+async function loadAtt() {
+  const rows = await api("/attendance?" + filterQuery());
+  $("none").hidden = rows.length > 0;
+  const where = (d, acc) => (d == null ? "–" : d + " m") + ", ±" + acc + " m";
+  $("rows").innerHTML = rows.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(dash(r.branch))}</td><td>${esc(dash(r.team))}</td>
+    <td>${hm(r.in_at)}</td><td>${where(r.in_dist, r.in_acc)}</td>
+    <td>${r.out_at ? hm(r.out_at) : "Still in"}</td><td>${r.out_at ? where(r.out_dist, r.out_acc) : "–"}</td>
+    <td>${hours(r)}</td><td>${km(r.stats.distanceM)}</td><td>${dur(r.stats.awayMs)}</td><td>${gapsText(r.stats)}</td>
+    <td>${flagPill(r.flags)}</td><td><button class="ghost" data-trip="${r.id}">View trip</button></td></tr>`).join("");
+}
+$("rows").onclick = e => { if (e.target.dataset.trip) showTrip(e.target.dataset.trip); };
+$("tripClose").onclick = () => { $("trip").hidden = true; };
+const clockMarks = a => [{label: "Clock-in", color: "#1f7a54", lat: a.in_lat, lng: a.in_lng, acc: a.in_acc, when: a.in_at, dist: a.in_dist}]
+  .concat(a.out_at ? [{label: "Clock-out", color: "#7a3fb0", lat: a.out_lat, lng: a.out_lng, acc: a.out_acc, when: a.out_at, dist: a.out_dist}] : []);
+async function showTrip(id) {
+  const t = await api("/trip/" + id), a = t.attendance, s = t.stats;
+  $("trip").hidden = false;
+  $("tripHead").textContent = a.name + " · " + hm(a.in_at) + " to " + (a.out_at ? hm(a.out_at) : "now");
+  const marks = clockMarks(a);
+  drawMap("tripMap", {office: t.office, runs: [{points: t.points, gaps: s.gaps}], marks, visits: t.visits});
+  $("tripClock").innerHTML = marks.map((k, i) => `<tr><td><span style="color:${k.color}">●</span> ${k.label}</td><td>${hm(k.when)}</td><td>${k.dist == null ? "–" : k.dist + " m"}</td><td>±${k.acc} m</td>
+    <td>${k.lat.toFixed(6)}, ${k.lng.toFixed(6)}</td><td>${selfie(a.id, t.photos, i ? "out" : "in")}</td></tr>`).join("");
+  const n = t.points.length;
+  $("tripStats").textContent = n + (n === 1 ? " point · " : " points · ") + km(s.distanceM) + " travelled · " + dur(s.awayMs) + " away from the branch" + (t.office ? " · farthest " + s.farthestM + " m from the branch" : "") + " · " + (s.gaps.length ? dur(s.gapMs) + " with no location" : "no gaps") + " · " + t.visits.length + " customer visit(s). Red points are mock locations, orange points were not verified by Play Integrity.";
+  $("tripGaps").innerHTML = s.gaps.length
+    ? '<p style="margin:12px 0 0"><b>Gaps where no location was received</b></p><ul>' + s.gaps.map(g => "<li>" + hm(g.from) + " to " + (g.ongoing ? "now" : hm(g.to)) + " (" + dur(g.to - g.from) + ")" + (g.ongoing ? ", nothing received since" : "") + "</li>").join("") + "</ul>"
+    : "";
+  $("tripFlags").style.marginTop = "12px";
+  $("tripFlags").innerHTML = flagList(t.flags);
+  $("trip").scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+
+// ---- Employee report ----
+async function loadReport() {
+  if (!$("rEmp").value) { $("rMsg").textContent = "Add an employee first."; return; }
+  const d = await api("/employee-day?employee=" + $("rEmp").value + "&from=" + dayStart($("rDate")));
+  $("report").hidden = false; $("rMsg").textContent = "";
+  const e = d.employee;
+  $("rHead").textContent = e.name + " · " + [e.branch, e.team].filter(Boolean).join(", ") + " · " + new Date(dayStart($("rDate"))).toLocaleDateString([], {weekday: "long", day: "numeric", month: "long", year: "numeric"});
+  drawMap("reportMap", {office: d.office, runs: d.shifts.map(s => ({points: s.points, gaps: s.stats.gaps})), marks: d.shifts.flatMap(s => clockMarks(s.attendance)), visits: d.visits});
+  $("rVisits").innerHTML = d.visits.map((v, i) => `<tr><td>${i + 1}</td><td><b>${esc(v.customer)}</b></td><td>${esc(v.place)}</td><td>${hm(v.start_at)}</td>
+    <td>${v.end_at ? hm(v.end_at) : '<span class="pill ok">In progress</span>'}</td><td>${dur((v.end_at || Date.now()) - v.start_at)}</td>
+    <td>${v.start_dist} m, ${v.end_at ? v.end_dist + " m" : "–"}</td><td>±${v.start_acc} m${v.end_at ? ", ±" + v.end_acc + " m" : ""}</td><td>${flagPill(v.flags)}</td></tr>`).join("") || '<tr><td colspan="9">No customer visits on this date.</td></tr>';
+  $("rShifts").innerHTML = d.shifts.map(s => { const a = s.attendance; return `<tr><td>${hm(a.in_at)}</td><td>${a.out_at ? hm(a.out_at) : "Still in"}</td><td>${hours(a)}</td>
+    <td>${km(s.stats.distanceM)}</td><td>${dur(s.stats.awayMs)}</td><td>${gapsText(s.stats)}</td>
+    <td style="display:flex;gap:6px">${selfie(a.id, s.photos, "in")}${selfie(a.id, s.photos, "out")}</td><td>${flagPill(s.flags)}</td></tr>`; }).join("") || '<tr><td colspan="8">Not clocked in on this date.</td></tr>';
+}
+$("rShow").onclick = loadReport;
+
+// ---- Customers ----
+let customers = [], editing = null;
+async function loadCustomers() { customers = await api("/customers"); renderCustomers(); }
+function renderCustomers() {
+  const s = $("cSearch").value.trim().toLowerCase();
+  const list = customers.filter(c => !s || (c.name + " " + c.place).toLowerCase().includes(s));
+  $("cRows").innerHTML = list.map(c => `<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.place)}</td>
+    <td><a href="https://www.google.com/maps?q=${c.lat},${c.lng}" target="_blank" rel="noopener">${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}</a></td>
+    <td class="num">${c.visits}</td><td>${c.last_visit ? new Date(c.last_visit).toLocaleString() : "–"}</td><td>${esc(dash(c.added_by))}</td>
+    <td><button class="ghost" data-cedit="${c.id}">Edit</button></td></tr>`).join("") || '<tr><td colspan="7">No customers yet.</td></tr>';
+}
+$("cSearch").oninput = renderCustomers;
+$("cRows").onclick = e => {
+  const c = customers.find(x => String(x.id) === e.target.dataset.cedit);
+  if (!c) return;
+  editing = c.id; $("cEdit").hidden = false; $("cMsg").textContent = "";
+  $("cName").value = c.name; $("cPlace").value = c.place; $("cLat").value = c.lat; $("cLng").value = c.lng;
+  $("cEdit").scrollIntoView({behavior: "smooth", block: "nearest"});
+};
+$("cCancel").onclick = () => { $("cEdit").hidden = true; };
+$("cSave").onclick = async () => {
+  try { await api("/customers/" + editing, {name: $("cName").value, place: $("cPlace").value, lat: parseFloat($("cLat").value), lng: parseFloat($("cLng").value)}); $("cEdit").hidden = true; loadCustomers(); }
+  catch (e) { $("cMsg").textContent = e.message; }
+};
+
+// ---- Settings ----
+let editingBranch = null;
+async function loadSettings() {
+  await loadLists();
+  $("bRows").innerHTML = branches.map(b => `<tr><td><b>${esc(b.name)}</b></td><td>${b.lat.toFixed(6)}, ${b.lng.toFixed(6)}</td><td class="num">${b.radius} m</td><td class="num">±${b.max_acc} m</td>
+    <td><button class="ghost" data-bedit="${b.id}">Edit</button></td></tr>`).join("") || '<tr><td colspan="5">No branches yet. Add one below.</td></tr>';
+  $("tmRows").innerHTML = teams.map(t => `<tr><td>${esc(t.name)}</td><td><button class="ghost" data-tmedit="${t.id}">Rename</button></td></tr>`).join("") || '<tr><td>No teams yet.</td></tr>';
+  const sel = (list, cur, id, kind) => `<select data-${kind}="${id}"><option value="">Not assigned</option>${list.map(x => `<option value="${x.id}"${x.id === cur ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select>`;
+  $("emps").innerHTML = employees.map(e => `<tr><td>${esc(e.name)}</td><td>${sel(branches, e.branch_id, e.id, "ebranch")}</td><td>${sel(teams, e.team_id, e.id, "eteam")}</td>
+    <td>${e.enrolled ? '<span class="pill ok">Enrolled</span> ' + esc(e.device) : "Waiting. Code: <b>" + esc(e.code) + "</b>"}</td>
+    <td><button class="ghost" data-reset="${e.id}">New code / reset phone</button></td></tr>`).join("");
+}
+function branchForm(b) {
+  editingBranch = b ? b.id : null;
+  $("bFormHead").textContent = b ? "Edit " + b.name : "Add a branch";
+  $("bName").value = b ? b.name : ""; $("bLat").value = b ? b.lat : ""; $("bLng").value = b ? b.lng : "";
+  $("bRad").value = b ? b.radius : 100; $("bAcc").value = b ? b.max_acc : 50; $("bCancel").hidden = !b;
+}
+$("bRows").onclick = e => { const b = branches.find(x => String(x.id) === e.target.dataset.bedit); if (b) branchForm(b); };
+$("bCancel").onclick = () => branchForm(null);
+$("bHere").onclick = () => navigator.geolocation.getCurrentPosition(
+  p => { $("bLat").value = p.coords.latitude.toFixed(6); $("bLng").value = p.coords.longitude.toFixed(6); $("bMsg").textContent = "Position filled in (±" + Math.round(p.coords.accuracy) + " m). Press Save."; },
+  () => { $("bMsg").textContent = "Couldn’t read your location. Type the coordinates instead."; });
+$("bSave").onclick = async () => {
+  try {
+    await api("/branches", {id: editingBranch, name: $("bName").value, lat: parseFloat($("bLat").value), lng: parseFloat($("bLng").value), radius: parseInt($("bRad").value, 10), maxAcc: parseInt($("bAcc").value, 10)});
+    $("bMsg").textContent = "Saved."; branchForm(null); loadSettings();
+  } catch (e) { $("bMsg").textContent = e.message; }
+};
+$("tmAdd").onclick = async () => {
+  try { await api("/teams", {name: $("tmName").value}); $("tmName").value = ""; $("tmMsg").textContent = "Added."; loadSettings(); }
+  catch (e) { $("tmMsg").textContent = e.message; }
+};
+$("tmRows").onclick = async e => {
+  const t = teams.find(x => String(x.id) === e.target.dataset.tmedit);
+  if (!t) return;
+  const name = prompt("New name for " + t.name, t.name);
+  if (name) { await api("/teams", {id: t.id, name}); loadSettings(); }
+};
+$("emps").onchange = async e => {
+  const id = e.target.dataset.ebranch || e.target.dataset.eteam;
+  if (!id) return;
+  const row = e.target.closest("tr");
+  await api("/employees/" + id, {branchId: row.querySelector("[data-ebranch]").value, teamId: row.querySelector("[data-eteam]").value});
+  $("empMsg").textContent = "Saved."; loadSettings();
+};
+$("emps").onclick = async e => {
+  const id = e.target.dataset.reset;
+  if (!id || !confirm("This signs the employee out of their current phone and creates a new enrollment code. Continue?")) return;
+  const r = await api("/employees/" + id + "/reset", {});
+  $("empMsg").textContent = "New enrollment code: " + r.code; loadSettings();
+};
+$("eAdd").onclick = async () => {
+  try {
+    const r = await api("/employees", {name: $("eName").value, branchId: $("eBranch").value, teamId: $("eTeam").value});
+    $("empMsg").textContent = "Added. Enrollment code: " + r.code; $("eName").value = ""; loadSettings();
+  } catch (e) { $("empMsg").textContent = e.message; }
+};
+
+loadLists().then(() => show("overview"));
 </script>
 </body>
 </html>
