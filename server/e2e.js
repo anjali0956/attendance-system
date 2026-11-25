@@ -240,6 +240,8 @@ async function main() {
   const day = await adminGet(base, "/employee-day?employee=" + asha.id + "&from=" + today);
   assert.strictEqual(day.employee.name, "Asha");
   assert.strictEqual(day.shifts.length, 1);
+  assert(Array.isArray(day.shifts[0].stops));
+  assert.deepStrictEqual(day.shifts[0].events.map(e => e.type), ["location_off", "location_on"]);
   assert.deepStrictEqual(day.visits.map(v => v.customer), ["Ravi Traders", "Ravi Traders", "Far Away Stores", "Ravi Traders"]);
   const last = day.visits[3];
   assert.strictEqual(last.start_dist, 2224);

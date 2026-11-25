@@ -2,7 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const Database = require("better-sqlite3");
-const { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats, shiftFlags, jpegFrom } = require("./lib");
+const { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats, stops, shiftFlags, jpegFrom } = require("./lib");
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1"; // only Caddy, on this same machine, may connect directly
@@ -432,9 +432,9 @@ api.get("/employee-day", (req, res) => {
   const emp = q("SELECT e.id,e.name,b.name AS branch,t.name AS team,e.branch_id FROM employees e LEFT JOIN branches b ON b.id=e.branch_id LEFT JOIN teams t ON t.id=e.team_id WHERE e.id=?").get(req.query.employee);
   if (!emp) return res.status(404).json({ error: "Not found" });
   const shifts = q(SHIFT + " WHERE a.employee_id=? AND a.in_at>=? AND a.in_at<? ORDER BY a.in_at").all(emp.id, from, to).map(a => {
-    const { pts, stats, flags } = review(a);
+    const { pts, stats, events, flags } = review(a);
     const photos = q("SELECT kind FROM photos WHERE attendance_id=?").all(a.id).map(p => p.kind);
-    return { attendance: a, points: pts, stats, flags, photos };
+    return { attendance: a, points: pts, stats, flags, photos, events, stops: stops(pts) };
   });
   const visits = q(VISIT + " WHERE v.employee_id=? AND v.start_at>=? AND v.start_at<? ORDER BY v.start_at").all(emp.id, from, to)
     .map(v => ({ ...v, flags: JSON.parse(v.flags) }));

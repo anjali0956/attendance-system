@@ -84,6 +84,22 @@ function tripStats(pts, office, open, now = Date.now()) {
   };
 }
 
+// Places the employee stayed: readings that stay within 100 m of where the stay began, for 10 minutes or more.
+function stops(pts, minMs = 10 * 60000, within = 100) {
+  const out = [];
+  let i = 0;
+  while (i < pts.length) {
+    let j = i;
+    while (j + 1 < pts.length && pts[j + 1].t - pts[j].t <= GAP_MS && dist(pts[i].lat, pts[i].lng, pts[j + 1].lat, pts[j + 1].lng) <= within) j++;
+    if (pts[j].t - pts[i].t >= minMs) {
+      const stay = pts.slice(i, j + 1);
+      out.push({ from: pts[i].t, to: pts[j].t, lat: stay.reduce((s, p) => s + p.lat, 0) / stay.length, lng: stay.reduce((s, p) => s + p.lng, 0) / stay.length });
+      i = j + 1;
+    } else i++;
+  }
+  return out;
+}
+
 // Flags about the shift as a whole. stats: from tripStats. events: [{t, type}] sent by the phone.
 function shiftFlags(att, stats, events, now = Date.now()) {
   const out = [];
@@ -103,4 +119,4 @@ function jpegFrom(b64) {
   return b.length >= 1000 && b[0] === 0xff && b[1] === 0xd8 ? b : null;
 }
 
-module.exports = { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats, shiftFlags, jpegFrom };
+module.exports = { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats, stops, shiftFlags, jpegFrom };

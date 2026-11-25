@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats, shiftFlags, jpegFrom } = require("./lib");
+const { dist, nonceFor, pointKey, integrityProblem, analyze, tripStats, stops, shiftFlags, jpegFrom } = require("./lib");
 assert(Math.abs(dist(0, 0, 0, 1) - 111195) < 200, "1 degree of longitude at the equator is about 111 km");
 assert.strictEqual(nonceFor(["a", "in", 1, 2, 3]), nonceFor(["a", "in", 1, 2, 3]));
 assert.notStrictEqual(nonceFor(["a", "in", 1, 2, 3]), nonceFor(["a", "in", 1, 2, 4]));
@@ -61,6 +61,17 @@ assert.strictEqual(tripStats([at(0, 10)], office, true, t0 + 5 * 60000).gaps.len
 assert.strictEqual(tripStats([at(0, 10)], office, false, t0 + 60 * 60000).gaps.length, 0);
 assert.strictEqual(tripStats(trip, null, false, t0).awayMs, 0, "works before the office is set");
 assert.strictEqual(tripStats([], office, true, t0).distanceM, 0);
+
+// Stops: 15 minutes in one place, a drive, then 5 minutes (too short) and 20 minutes somewhere else
+const stay = (from, n, lat) => Array.from({ length: n }, (_, i) => at(from + i, lat + (i % 2) * 0.00003));
+const day = [...stay(0, 16, 10), at(17, 10.005), at(18, 10.01), ...stay(19, 6, 10.02), at(26, 10.03), ...stay(27, 21, 10.04)];
+const found = stops(day);
+assert.strictEqual(found.length, 2);
+assert.deepStrictEqual([found[0].from, found[0].to], [t0, t0 + 15 * 60000]);
+assert(Math.abs(found[1].lat - 10.04) < 0.0001);
+assert.strictEqual(found[1].to - found[1].from, 20 * 60000);
+assert.deepStrictEqual(stops([at(0, 10), at(30, 10)]), [], "a gap with no readings isn't a stop");
+assert.deepStrictEqual(stops([]), []);
 
 // Whole-shift flags
 const shift = { in_at: t0, out_at: t0 + 8 * 3600000 };

@@ -6,8 +6,9 @@
 <title>Attendance admin</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
-:root{--bg:#f3f5f2;--surface:#fff;--ink:#1b2a2f;--muted:#66767a;--line:#d9e0dc;--ok:#1f7a54;--okbg:#dff1e7;--bad:#a02727;--badbg:#f6dcdc;--warn:#8a5a00;--warnbg:#fbecc9;--series:#2c6fbb;--track:#e3e8e5;--band:#1d3b57;--bandink:#fff}
-@media (prefers-color-scheme:dark){:root{--bg:#101a1d;--surface:#17252a;--ink:#e8efec;--muted:#93a5a8;--line:#27393e;--ok:#58c796;--okbg:#17382b;--bad:#f09a9a;--badbg:#3d1d1d;--warn:#f0c36a;--warnbg:#3a2d12;--series:#6ea8e8;--track:#27393e;--band:#1f3a52;--bandink:#e8efec}}
+/* Black and white. Colour is kept only where it means something: green good, amber warning, red problem. */
+:root{--bg:#f4f4f4;--surface:#fff;--ink:#111;--muted:#666;--line:#e2e2e2;--ok:#1f7a54;--okbg:#e3f3ea;--bad:#a02727;--badbg:#f8e1e1;--warn:#8a5a00;--warnbg:#fbefd5;--series:#111;--track:#e6e6e6;--band:#111;--bandink:#fff;--hover:#f0f0f0;--path:#111}
+@media (prefers-color-scheme:dark){:root{--bg:#0c0c0c;--surface:#181818;--ink:#ededed;--muted:#a0a0a0;--line:#2c2c2c;--ok:#58c796;--okbg:#17382b;--bad:#f09a9a;--badbg:#3d1d1d;--warn:#f0c36a;--warnbg:#3a2d12;--series:#ededed;--track:#2c2c2c;--band:#222;--bandink:#ededed;--hover:#242424;--path:#111}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:1500px;margin:0 auto;padding:20px 16px 48px}
@@ -54,6 +55,39 @@ ul{margin:6px 0 0;padding-left:20px}
 .attention{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
 .attention .pill{font-size:15px;align-self:start}
 details{margin-top:8px;font-size:14px}summary{cursor:pointer;color:var(--series)}
+.report{display:grid;grid-template-columns:280px minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){.report{grid-template-columns:minmax(0,1fr)}}
+.members{position:sticky;top:12px;max-height:calc(100vh - 24px);display:flex;flex-direction:column;gap:8px}
+#memberList{overflow-y:auto;margin:0 -8px}
+.member{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:none;color:var(--ink);border:0;border-left:3px solid transparent;border-radius:0;padding:10px 8px}
+.member:hover{background:var(--hover)}.member[aria-current="true"]{background:var(--hover);border-left-color:var(--ink)}
+.member small{display:block;color:var(--muted);font-size:12px}
+.avatar{flex:0 0 auto;width:40px;height:40px;border-radius:50%;background:var(--track);color:var(--ink);display:flex;align-items:center;justify-content:center;font-weight:600}
+.avatar.big{width:56px;height:56px;font-size:20px}
+.rhead{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.rhead h2{font-size:22px;margin:0}
+.facts{display:flex;gap:24px;flex-wrap:wrap;margin-left:auto}
+.facts div{font-size:13px;color:var(--muted)}.facts b{display:block;color:var(--ink);font-size:15px}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:16px}
+@media (max-width:1200px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.kpis .card{margin:0}.kpis span{font-size:14px;color:var(--muted)}.kpis b{display:block;font-size:26px;margin:4px 0;font-variant-numeric:tabular-nums}.kpis small{color:var(--muted)}
+.mapgrid{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:16px}
+@media (max-width:1000px){.mapgrid{grid-template-columns:minmax(0,1fr)}}
+.mapbox{position:relative;padding:0;overflow:hidden}
+.mapbox .map{height:560px;margin:0;border:0;border-radius:0}
+.layers{position:absolute;z-index:500;top:12px;left:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:4px}
+.layers label{display:flex;gap:8px;align-items:center;margin:0;padding:4px 8px;font-size:14px;color:var(--ink);cursor:pointer}
+.layers input{width:auto}
+.here{position:absolute;z-index:500;right:12px;bottom:24px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--muted)}
+.here a{display:block;color:var(--ink);font-size:15px;font-weight:600}
+.timeline{max-height:560px;overflow-y:auto}
+.tl{display:grid;grid-template-columns:76px 28px minmax(0,1fr);gap:8px;padding:12px 0;border-top:1px solid var(--line);cursor:pointer;align-items:start}
+.tl:hover{background:var(--hover)}
+.tl time{color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+.tl i{font-style:normal;width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;background:var(--track)}
+.tl i.stop{background:var(--warnbg);color:var(--warn)}.tl i.gap{background:var(--badbg);color:var(--bad)}.tl i.in{background:var(--okbg);color:var(--ok)}
+.tl b{display:block}.tl small{display:block;color:var(--muted)}
+.stopmark span{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:5px;background:#8a5a00;color:#fff;font:700 11px system-ui;border:2px solid #fff}
 .vnum span{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--surface);font:600 12px system-ui;border:2px solid var(--surface)}
 </style>
 </head>
@@ -146,26 +180,56 @@ details{margin-top:8px;font-size:14px}summary{cursor:pointer;color:var(--series)
 
 <!-- Employee report -->
 <section data-page="report">
-  <div class="card">
-    <h2>Employee report</h2>
-    <div class="row">
-      <div><label for="rEmp">Employee</label><select id="rEmp"></select></div>
-      <div><label for="rDate">Date</label><input id="rDate" type="date"></div>
-      <button id="rShow">Show</button>
+ <div class="report">
+  <aside class="card members">
+    <h2>Team members</h2>
+    <input id="mSearch" placeholder="Search name or team" aria-label="Search name or team">
+    <select id="mBranch" aria-label="Branch"></select>
+    <div id="memberList"></div>
+  </aside>
+  <div>
+    <p class="msg card" id="rMsg">Choose a team member.</p>
+    <div id="report" hidden>
+      <div class="card rhead">
+        <div class="avatar big" id="rAvatar"></div>
+        <div><h2 id="rName"></h2><div class="msg" style="margin:2px 0 0" id="rSub"></div></div>
+        <div class="facts">
+          <div>Date<input id="rDate" type="date" style="width:auto;padding:4px 8px"></div>
+          <div>Status<b id="rStatus"></b></div>
+          <div>Last reported<b id="rLast"></b></div>
+          <div>GPS accuracy<b id="rGps"></b></div>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="card"><span>Clock-in</span><b id="kIn"></b><small id="kInSub"></small></div>
+        <div class="card"><span>Working</span><b id="kWork"></b><small id="kWorkSub"></small></div>
+        <div class="card"><span>Distance</span><b id="kDist"></b><small id="kDistSub"></small></div>
+        <div class="card"><span>Visits</span><b id="kVisits"></b><small id="kVisitsSub"></small></div>
+        <div class="card"><span>Away from branch</span><b id="kAway"></b><small id="kAwaySub"></small></div>
+        <div class="card"><span>Checks</span><b id="kChecks"></b><small id="kChecksSub"></small></div>
+      </div>
+      <div class="mapgrid">
+        <div class="card mapbox">
+          <div class="map" id="reportMap"></div>
+          <div class="layers" id="layers"></div>
+          <div class="here" id="here" hidden></div>
+        </div>
+        <div class="card timeline">
+          <h2 style="margin-bottom:2px">Day's activity</h2>
+          <div class="msg" style="margin:0 0 10px" id="tlSub"></div>
+          <div id="tl"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Customer visits</h2>
+        <div class="scroll"><table class="wide"><thead><tr><th>#</th><th>Customer</th><th>Place</th><th>Start</th><th>End</th><th>Time spent</th><th>Distance from customer (start, end)</th><th>GPS accuracy</th><th>Checks</th></tr></thead><tbody id="rVisits"></tbody></table></div>
+        <h3>Clock-in and clock-out</h3>
+        <div class="scroll"><table class="wide"><thead><tr><th>In</th><th>Out</th><th>Hours</th><th>Travelled</th><th>Away</th><th>Gaps</th><th>Selfies</th><th>Checks</th></tr></thead><tbody id="rShifts"></tbody></table></div>
+        <div id="rFlags" style="margin-top:12px"></div>
+      </div>
     </div>
-    <p class="msg" id="rMsg"></p>
   </div>
-  <div id="report" hidden>
-    <div class="card">
-      <h2 id="rHead"></h2>
-      <div class="map" id="reportMap"></div>
-      <p class="msg">Numbers on the map are customer visits in order. The blue line is the path, dashed grey lines are gaps with no location.</p>
-      <h3>Customer visits</h3>
-      <div class="scroll"><table class="wide"><thead><tr><th>#</th><th>Customer</th><th>Place</th><th>Start</th><th>End</th><th>Time spent</th><th>Distance from customer (start, end)</th><th>GPS accuracy</th><th>Checks</th></tr></thead><tbody id="rVisits"></tbody></table></div>
-      <h3>Clock-in and clock-out</h3>
-      <div class="scroll"><table class="wide"><thead><tr><th>In</th><th>Out</th><th>Hours</th><th>Travelled</th><th>Away</th><th>Gaps</th><th>Selfies</th><th>Checks</th></tr></thead><tbody id="rShifts"></tbody></table></div>
-    </div>
-  </div>
+ </div>
 </section>
 
 <!-- Customers -->
@@ -256,7 +320,7 @@ function show(p) {
   document.querySelectorAll("[data-page]").forEach(s => s.hidden = s.dataset.page !== p);
   document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === p ? "page" : "false"));
   $("filters").hidden = !["overview", "attendance"].includes(p);
-  ({overview: loadOverview, attendance: loadAtt, customers: loadCustomers, settings: loadSettings, report: () => {}})[p]();
+  ({overview: loadOverview, attendance: loadAtt, customers: loadCustomers, settings: loadSettings, report: renderMembers})[p]();
 }
 $("tabs").onclick = e => { if (e.target.dataset.tab) show(e.target.dataset.tab); };
 document.body.addEventListener("click", e => { if (e.target.dataset.goto) show(e.target.dataset.goto); });
@@ -272,7 +336,7 @@ async function loadLists() {
   keep("fTeam", opts(teams, "All teams", ["none", "Not assigned"]));
   keep("eBranch", opts(branches, null, ["", "Not assigned"]));
   keep("eTeam", opts(teams, null, ["", "Not assigned"]));
-  keep("rEmp", employees.map(e => `<option value="${e.id}">${esc(e.name)}${e.branch ? " (" + esc(e.branch) + ")" : ""}</option>`).join(""));
+  keep("mBranch", opts(branches, "All branches"));
 }
 const filterQuery = () => "from=" + dayStart($("date")) + "&branch=" + $("fBranch").value + "&team=" + $("fTeam").value;
 
@@ -348,7 +412,7 @@ window.addEventListener("resize", () => { if (page === "overview" && lastChart.l
 document.body.addEventListener("click", e => {
   const b = e.target.closest("[data-report]");
   if (!b) return;
-  $("rEmp").value = b.dataset.report; $("rDate").value = b.dataset.day;
+  selectedEmp = b.dataset.report; $("rDate").value = b.dataset.day;
   show("report"); loadReport();
 });
 async function loadAlerts() {
@@ -359,45 +423,77 @@ async function loadAlerts() {
 // ---- Maps ----
 const maps = {};
 // runs: [{points, gaps}], one per shift. marks: clock-ins and outs. visits: customer visits, numbered in order.
-function drawMap(holder, {office, runs, marks, visits}) {
+// stops: places the employee stayed. Each kind is its own layer, so the report can switch it on and off.
+const PATH = "#111", MUTED = "#8a8a8a";
+function drawMap(holder, {office, runs, marks, visits, stops}, hidden = []) {
   let m = maps[holder];
-  if (!m) { m = maps[holder] = {map: L.map(holder)}; L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19, attribution: "© OpenStreetMap contributors"}).addTo(m.map); }
-  if (m.layer) m.layer.remove();
-  const layer = m.layer = L.layerGroup().addTo(m.map), ll = [];
-  if (office) { L.circle([office.lat, office.lng], {radius: office.radius, color: "#66767a", dashArray: "6 5", fill: false}).bindTooltip(esc(office.name || "Branch")).addTo(layer); ll.push([office.lat, office.lng]); }
+  if (!m) { m = maps[holder] = {map: L.map(holder, {zoomControl: false}), hidden: new Set(hidden)}; L.control.zoom({position: "topright"}).addTo(m.map); L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19, attribution: "© OpenStreetMap contributors"}).addTo(m.map); }
+  Object.values(m.groups || {}).forEach(g => g.remove());
+  const g = m.groups = {branch: L.layerGroup(), path: L.layerGroup(), points: L.layerGroup(), stops: L.layerGroup(), visits: L.layerGroup(), marks: L.layerGroup()};
+  const ll = [];
+  if (office) { L.circle([office.lat, office.lng], {radius: office.radius, color: MUTED, dashArray: "6 5", fill: false}).bindTooltip(esc(office.name || "Branch")).addTo(g.branch); ll.push([office.lat, office.lng]); }
   for (const {points: pts, gaps} of runs) {
     // A solid line where points arrived, and a dashed grey one across each gap, where the route is unknown.
-    const isGap = (a, b) => gaps.some(g => g.from === a.t && g.to === b.t);
+    const isGap = (a, b) => gaps.some(x => x.from === a.t && x.to === b.t);
     let run = [];
     pts.forEach((p, i) => {
       if (i && isGap(pts[i - 1], p)) {
-        L.polyline(run, {color: "#2c6fbb", weight: 3}).addTo(layer);
-        L.polyline([run[run.length - 1], [p.lat, p.lng]], {color: "#66767a", weight: 2, dashArray: "4 8"}).bindTooltip("No location received, " + hm(pts[i - 1].t) + " to " + hm(p.t)).addTo(layer);
+        L.polyline(run, {color: PATH, weight: 3}).addTo(g.path);
+        L.polyline([run[run.length - 1], [p.lat, p.lng]], {color: MUTED, weight: 2, dashArray: "4 8"}).bindTooltip("No location received, " + hm(pts[i - 1].t) + " to " + hm(p.t)).addTo(g.path);
         run = [];
       }
       run.push([p.lat, p.lng]); ll.push([p.lat, p.lng]);
     });
-    if (run.length) L.polyline(run, {color: "#2c6fbb", weight: 3}).addTo(layer);
+    if (run.length) L.polyline(run, {color: PATH, weight: 3}).addTo(g.path);
     pts.forEach(p => {
-      const color = p.mock ? "#c0392b" : !p.ver ? "#e08e0b" : "#2c6fbb";
-      L.circleMarker([p.lat, p.lng], {radius: 2.5, weight: 1, color, fillColor: color, fillOpacity: 1}).bindTooltip(hm(p.t) + " ±" + p.acc + " m" + (p.mock ? " (mock)" : !p.ver ? " (unverified)" : "")).addTo(layer);
+      const color = p.mock ? "#c0392b" : !p.ver ? "#e08e0b" : "#555";
+      L.circleMarker([p.lat, p.lng], {radius: 2.5, weight: 1, color, fillColor: color, fillOpacity: 1}).bindTooltip(hm(p.t) + " ±" + p.acc + " m" + (p.mock ? " (mock)" : !p.ver ? " (unverified)" : "")).addTo(p.mock || !p.ver ? g.path : g.points);
     });
   }
+  (stops || []).forEach(s => {
+    L.marker([s.lat, s.lng], {icon: L.divIcon({className: "stopmark", html: "<span>Ⅱ</span>", iconSize: [22, 22]})})
+      .bindTooltip("Stop, " + hm(s.from) + " to " + hm(s.to) + " (" + dur(s.to - s.from) + ")").addTo(g.stops);
+  });
   // Clock-in and clock-out, each with a ring showing how accurate the reading was.
   for (const k of marks) {
-    L.circle([k.lat, k.lng], {radius: k.acc, color: k.color, weight: 1, fillOpacity: 0.15}).addTo(layer);
+    L.circle([k.lat, k.lng], {radius: k.acc, color: k.color, weight: 1, fillOpacity: 0.15}).addTo(g.marks);
     L.circleMarker([k.lat, k.lng], {radius: 9, color: "#fff", weight: 2, fillColor: k.color, fillOpacity: 1})
-      .bindTooltip(k.label + ", " + hm(k.when) + (k.dist == null ? "" : ", " + k.dist + " m from the branch") + ", ±" + k.acc + " m", {permanent: marks.length <= 2, direction: "top"}).addTo(layer);
+      .bindTooltip(k.label + ", " + hm(k.when) + (k.dist == null ? "" : ", " + k.dist + " m from the branch") + ", ±" + k.acc + " m", {permanent: marks.length <= 2, direction: "top"}).addTo(g.marks);
     ll.push([k.lat, k.lng]);
   }
   (visits || []).forEach((v, i) => {
-    if (v.start_dist > 150) L.polyline([[v.start_lat, v.start_lng], [v.c_lat, v.c_lng]], {color: "#a02727", weight: 2, dashArray: "2 6"}).bindTooltip("Saved location of " + esc(v.customer)).addTo(layer);
+    if (v.start_dist > 150) L.polyline([[v.start_lat, v.start_lng], [v.c_lat, v.c_lng]], {color: "#a02727", weight: 2, dashArray: "2 6"}).bindTooltip("Saved location of " + esc(v.customer)).addTo(g.visits);
     L.marker([v.start_lat, v.start_lng], {icon: L.divIcon({className: "vnum", html: "<span>" + (i + 1) + "</span>", iconSize: [24, 24]})})
-      .bindTooltip((i + 1) + ". " + esc(v.customer) + ", " + esc(v.place) + "<br>" + hm(v.start_at) + " to " + (v.end_at ? hm(v.end_at) : "now")).addTo(layer);
+      .bindTooltip((i + 1) + ". " + esc(v.customer) + ", " + esc(v.place) + "<br>" + hm(v.start_at) + " to " + (v.end_at ? hm(v.end_at) : "now")).addTo(g.visits);
     ll.push([v.start_lat, v.start_lng]);
   });
+  Object.entries(g).forEach(([k, layer]) => { if (!m.hidden.has(k)) layer.addTo(m.map); });
   if (ll.length) m.map.fitBounds(ll, {padding: [40, 40], maxZoom: 18}); else m.map.setView([10.5, 76.2], 8);
   setTimeout(() => m.map.invalidateSize(), 50);
+  return m;
+}
+function toggleLayer(holder, key, on) {
+  const m = maps[holder];
+  if (on) { m.hidden.delete(key); m.groups[key].addTo(m.map); } else { m.hidden.add(key); m.groups[key].remove(); }
+}
+
+// Street addresses from OpenStreetMap's free lookup service, which allows one request a second. Kept in the browser.
+const addrCache = (() => { try { return JSON.parse(localStorage.getItem("addresses") || "{}"); } catch (e) { return {}; } })();
+let addrQueue = Promise.resolve();
+function address(lat, lng) {
+  const key = lat.toFixed(4) + "," + lng.toFixed(4);
+  if (key in addrCache) return Promise.resolve(addrCache[key]);
+  const p = addrQueue.then(() => new Promise(r => setTimeout(r, 1100)))
+    .then(() => fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=en&lat=" + lat + "&lon=" + lng))
+    .then(r => r.json())
+    .then(j => {
+      addrCache[key] = (j.display_name || "").split(", ").slice(0, 4).join(", ");
+      try { localStorage.setItem("addresses", JSON.stringify(addrCache)); } catch (e) {}
+      return addrCache[key];
+    })
+    .catch(() => "");
+  addrQueue = p;
+  return p;
 }
 const selfie = (attId, photos, kind) => photos.includes(kind)
   ? `<a href="/admin/api/photo/${attId}/${kind}" target="_blank"><img src="/admin/api/photo/${attId}/${kind}" alt="Selfie" style="height:96px;border-radius:6px;display:block"></a>` : "None";
@@ -418,7 +514,7 @@ async function loadAtt() {
 $("rows").onclick = e => { if (e.target.dataset.trip) showTrip(e.target.dataset.trip); };
 $("tripClose").onclick = () => { $("trip").hidden = true; };
 const clockMarks = a => [{label: "Clock-in", color: "#1f7a54", lat: a.in_lat, lng: a.in_lng, acc: a.in_acc, when: a.in_at, dist: a.in_dist}]
-  .concat(a.out_at ? [{label: "Clock-out", color: "#7a3fb0", lat: a.out_lat, lng: a.out_lng, acc: a.out_acc, when: a.out_at, dist: a.out_dist}] : []);
+  .concat(a.out_at ? [{label: "Clock-out", color: "#111", lat: a.out_lat, lng: a.out_lng, acc: a.out_acc, when: a.out_at, dist: a.out_dist}] : []);
 async function showTrip(id) {
   const t = await api("/trip/" + id), a = t.attendance, s = t.stats;
   $("trip").hidden = false;
@@ -438,13 +534,102 @@ async function showTrip(id) {
 }
 
 // ---- Employee report ----
+let selectedEmp = null;
+const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+function renderMembers() {
+  const s = $("mSearch").value.trim().toLowerCase(), b = $("mBranch").value;
+  const list = employees.filter(e => (b === "all" || String(e.branch_id) === b) && (!s || (e.name + " " + (e.team || "")).toLowerCase().includes(s)));
+  $("memberList").innerHTML = list.map(e => `<button class="member" data-member="${e.id}" aria-current="${String(e.id) === String(selectedEmp)}">
+    <span class="avatar">${esc(initials(e.name))}</span><span><b>${esc(e.name)}</b><small>${esc([e.team, e.branch].filter(Boolean).join(" · ") || "No team or branch")}</small></span></button>`).join("")
+    || '<p class="msg" style="padding:0 8px">No one matches.</p>';
+}
+$("mSearch").oninput = renderMembers;
+$("mBranch").onchange = renderMembers;
+$("memberList").onclick = e => {
+  const b = e.target.closest("[data-member]");
+  if (b) { selectedEmp = b.dataset.member; renderMembers(); loadReport(); }
+};
+$("rDate").onchange = () => loadReport();
+
 async function loadReport() {
-  if (!$("rEmp").value) { $("rMsg").textContent = "Add an employee first."; return; }
-  const d = await api("/employee-day?employee=" + $("rEmp").value + "&from=" + dayStart($("rDate")));
-  $("report").hidden = false; $("rMsg").textContent = "";
-  const e = d.employee;
-  $("rHead").textContent = e.name + " · " + [e.branch, e.team].filter(Boolean).join(", ") + " · " + new Date(dayStart($("rDate"))).toLocaleDateString([], {weekday: "long", day: "numeric", month: "long", year: "numeric"});
-  drawMap("reportMap", {office: d.office, runs: d.shifts.map(s => ({points: s.points, gaps: s.stats.gaps})), marks: d.shifts.flatMap(s => clockMarks(s.attendance)), visits: d.visits});
+  if (!selectedEmp) return;
+  const d = await api("/employee-day?employee=" + selectedEmp + "&from=" + dayStart($("rDate")));
+  $("report").hidden = false; $("rMsg").hidden = true;
+  const e = d.employee, shifts = d.shifts, visits = d.visits;
+  const allPts = shifts.flatMap(s => s.points), lastPt = allPts[allPts.length - 1];
+  const open = shifts.some(s => !s.attendance.out_at);
+
+  // Header
+  $("rAvatar").textContent = initials(e.name);
+  $("rName").textContent = e.name;
+  $("rSub").textContent = [e.team, e.branch].filter(Boolean).join(" · ") || "No team or branch";
+  $("rStatus").innerHTML = open ? '<span class="pill ok">Clocked in</span>' : shifts.length ? '<span class="pill">Clocked out</span>' : '<span class="pill warn">Not clocked in</span>';
+  $("rLast").textContent = lastPt ? new Date(lastPt.t).toLocaleString([], {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"}) : "–";
+  $("rGps").textContent = lastPt ? "±" + lastPt.acc + " m" : "–";
+
+  // Summary boxes
+  const sum = f => shifts.reduce((a, s) => a + f(s), 0);
+  const workMs = sum(s => (s.attendance.out_at || Date.now()) - s.attendance.in_at);
+  const lastShift = shifts[shifts.length - 1];
+  const allFlags = shifts.flatMap(s => s.flags).concat(visits.flatMap(v => v.flags.map(f => v.customer + ": " + f)));
+  const farthest = Math.max(0, ...shifts.map(s => s.stats.farthestM));
+  $("kIn").textContent = shifts.length ? hm(shifts[0].attendance.in_at) : "–";
+  $("kInSub").textContent = !shifts.length ? "Not clocked in" : lastShift.attendance.out_at ? "Clock-out " + hm(lastShift.attendance.out_at) : "Still clocked in";
+  $("kWork").textContent = shifts.length ? dur(workMs) : "–";
+  $("kWorkSub").textContent = shifts.length + " shift" + (shifts.length === 1 ? "" : "s") + (open ? ", one still open" : "");
+  $("kDist").textContent = km(sum(s => s.stats.distanceM));
+  $("kDistSub").textContent = allPts.length + " GPS readings";
+  $("kVisits").textContent = visits.length;
+  $("kVisitsSub").textContent = visits.filter(v => !v.end_at).length + " in progress · " + visits.filter(v => v.flags.length).length + " flagged";
+  $("kAway").textContent = dur(sum(s => s.stats.awayMs));
+  $("kAwaySub").textContent = d.office ? "Farthest " + (farthest < 1000 ? farthest + " m" : km(farthest)) : "No branch set";
+  $("kChecks").textContent = allFlags.length;
+  $("kChecksSub").textContent = sum(s => s.stats.gaps.length) + " GPS gap(s)";
+
+  // Map, with switches for each layer
+  const stops = shifts.flatMap(s => s.stops);
+  drawMap("reportMap", {office: d.office, runs: shifts.map(s => ({points: s.points, gaps: s.stats.gaps})), marks: shifts.flatMap(s => clockMarks(s.attendance)), visits, stops}, ["points"]);
+  const hidden = maps.reportMap.hidden;
+  const layer = (key, label) => `<label><input type="checkbox" data-layer="${key}"${hidden.has(key) ? "" : " checked"}> ${label}</label>`;
+  $("layers").innerHTML = layer("visits", "Visits (" + visits.length + ")") + layer("stops", "Stops (" + stops.length + ")")
+    + layer("path", "GPS path (" + allPts.length + " readings)") + layer("points", "GPS points") + layer("marks", "Clock-in and out") + layer("branch", "Branch");
+  $("here").hidden = !lastPt;
+  if (lastPt) $("here").innerHTML = (open ? "Current location" : "Last location") + `<a href="https://www.google.com/maps?q=${lastPt.lat},${lastPt.lng}" target="_blank" rel="noopener">${lastPt.lat.toFixed(5)}, ${lastPt.lng.toFixed(5)}</a>±${lastPt.acc} m · ${hm(lastPt.t)}`;
+
+  // Timeline: everything that happened, in order. Clicking an entry shows it on the map.
+  const items = [];
+  const fromBranch = dist => dist == null ? "" : dist + " m from " + (e.branch || "the branch");
+  for (const s of shifts) {
+    const a = s.attendance;
+    items.push({t: a.in_at, icon: "→", cls: "in", title: "Clock-in", sub: fromBranch(a.in_dist), lat: a.in_lat, lng: a.in_lng});
+    s.stops.forEach(st => items.push({t: st.from, icon: "Ⅱ", cls: "stop", title: "Stop · " + dur(st.to - st.from), sub: hm(st.from) + " to " + hm(st.to), lat: st.lat, lng: st.lng}));
+    s.stats.gaps.forEach(gp => items.push({t: gp.from, icon: "!", cls: "gap", title: "GPS gap · " + dur(gp.to - gp.from), sub: hm(gp.from) + " to " + (gp.ongoing ? "now, nothing received since" : hm(gp.to))}));
+    s.events.forEach(ev => items.push(ev.type === "location_off"
+      ? {t: ev.t, icon: "⊘", cls: "gap", title: "Location switched off"} : {t: ev.t, icon: "✓", title: "Location switched back on"}));
+    if (a.out_at) items.push({t: a.out_at, icon: "←", title: "Clock-out", sub: fromBranch(a.out_dist), lat: a.out_lat, lng: a.out_lng});
+  }
+  visits.forEach((v, i) => items.push({t: v.start_at, icon: String(i + 1), title: "Visit · " + v.customer,
+    sub: v.place + " · " + (v.end_at ? hm(v.start_at) + " to " + hm(v.end_at) + " (" + dur(v.end_at - v.start_at) + ")" : "in progress") + (v.flags.length ? " · flagged" : ""),
+    lat: v.start_lat, lng: v.start_lng, noAddress: true}));
+  items.sort((a, b) => a.t - b.t);
+  $("tlSub").textContent = new Date(dayStart($("rDate"))).toLocaleDateString([], {weekday: "short", day: "numeric", month: "short", year: "numeric"}) + " · in time order";
+  $("tl").innerHTML = items.map((it, i) => `<div class="tl" data-tl="${i}"><time>${hm(it.t)}</time><i class="${it.cls || ""}">${esc(it.icon)}</i>
+    <div><b>${esc(it.title)}</b>${it.sub ? "<small>" + esc(it.sub) + "</small>" : ""}${it.lat != null && !it.noAddress ? `<small data-addr="${i}"></small>` : ""}</div></div>`).join("")
+    || '<p class="msg">Nothing recorded on this date.</p>';
+  $("tl").onclick = ev => {
+    const row = ev.target.closest("[data-tl]"), it = row && items[row.dataset.tl];
+    if (it && it.lat != null) maps.reportMap.map.setView([it.lat, it.lng], 17);
+  };
+  const shown = selectedEmp + "|" + $("rDate").value;
+  items.forEach((it, i) => {
+    if (it.lat == null || it.noAddress) return;
+    address(it.lat, it.lng).then(a => {
+      const el = document.querySelector(`#tl [data-addr="${i}"]`);
+      if (el && shown === selectedEmp + "|" + $("rDate").value) el.textContent = a;
+    });
+  });
+
+  $("rFlags").innerHTML = allFlags.length ? flagList(allFlags) : "";
   $("rVisits").innerHTML = d.visits.map((v, i) => `<tr><td>${i + 1}</td><td><b>${esc(v.customer)}</b></td><td>${esc(v.place)}</td><td>${hm(v.start_at)}</td>
     <td>${v.end_at ? hm(v.end_at) : '<span class="pill ok">In progress</span>'}</td><td>${dur((v.end_at || Date.now()) - v.start_at)}</td>
     <td>${v.start_dist} m, ${v.end_at ? v.end_dist + " m" : "–"}</td><td>±${v.start_acc} m${v.end_at ? ", ±" + v.end_acc + " m" : ""}</td><td>${flagPill(v.flags)}</td></tr>`).join("") || '<tr><td colspan="9">No customer visits on this date.</td></tr>';
@@ -452,7 +637,7 @@ async function loadReport() {
     <td>${km(s.stats.distanceM)}</td><td>${dur(s.stats.awayMs)}</td><td>${gapsText(s.stats)}</td>
     <td style="display:flex;gap:6px">${selfie(a.id, s.photos, "in")}${selfie(a.id, s.photos, "out")}</td><td>${flagPill(s.flags)}</td></tr>`; }).join("") || '<tr><td colspan="8">Not clocked in on this date.</td></tr>';
 }
-$("rShow").onclick = loadReport;
+$("layers").onchange = e => { if (e.target.dataset.layer) toggleLayer("reportMap", e.target.dataset.layer, e.target.checked); };
 
 // ---- Customers ----
 let customers = [], editing = null;
